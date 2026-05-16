@@ -1,0 +1,13 @@
+@{
+    ViewData["Title"] = "회원정보";
+}
+<header class="page-header">
+    <h1>회원정보</h1>
+    <p>인증된 사용자만 접근하는 MVC 화면입니다.</p>
+</header>
+<section class="detail-panel">
+    <dl>
+        <dt>로그인 상태</dt><dd>@(User.Identity?.IsAuthenticated == true ? "로그인됨" : "로그인 필요")</dd>
+        <dt>사용자 이름</dt><dd>@User.Identity?.Name</dd>
+    </dl>
+</section>
