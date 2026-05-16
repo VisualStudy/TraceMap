@@ -1,0 +1,91 @@
+@model TraceMap.ViewModels.PlacesIndexViewModel
+
+@{
+    ViewData["Title"] = "내 장소 목록";
+}
+
+<header class="page-header">
+    <h1>내 장소 목록</h1>
+    <p>장소명, 카테고리, 설명, 방문 여부를 카드로 확인합니다.</p>
+</header>
+
+<a class="outline-button full" asp-action="Create">+ 새 장소 추가</a>
+
+<section class="filter-panel">
+    <div class="filter-header">
+        <h2>카테고리별 보기</h2>
+        <p>
+            전체 @(Model.TotalCount)개 중
+            <strong>@(Model.FilteredCount)</strong>개 장소를 표시합니다.
+        </p>
+    </div>
+
+    <div class="category-filter-buttons">
+        <a class="filter-button @(Model.IsAllSelected ? "active" : "")"
+           asp-action="Index">
+            전체
+        </a>
+
+        @foreach (var category in Model.Categories)
+        {
+            var isSelected = string.Equals(
+                Model.SelectedCategory,
+                category,
+                StringComparison.OrdinalIgnoreCase);
+
+            <a class="filter-button @(isSelected ? "active" : "")"
+               asp-action="Index"
+               asp-route-category="@category">
+                @category
+            </a>
+        }
+    </div>
+</section>
+
+@if (!Model.Places.Any())
+{
+    <section class="empty-state">
+        <h2>표시할 장소가 없습니다.</h2>
+
+        @if (Model.IsAllSelected)
+        {
+            <p>아직 저장된 장소가 없습니다. 새 장소를 추가해 보세요.</p>
+        }
+        else
+        {
+            <p>
+                <strong>@Model.SelectedCategory</strong> 카테고리에 해당하는 장소가 없습니다.
+                다른 카테고리를 선택하거나 전체 목록을 확인해 보세요.
+            </p>
+        }
+
+        <a class="small-button" asp-action="Index">전체 보기</a>
+    </section>
+}
+else
+{
+    <section class="cards">
+        @foreach (var place in Model.Places)
+        {
+            <article class="place-card">
+                <div class="card-top">
+                    <h2>@place.Name</h2>
+                    <span class="badge">@place.Category</span>
+                </div>
+
+                <p>@place.Description</p>
+
+                <div class="meta-row">
+                    <span>방문 여부: <strong>@(place.IsVisited ? "완료" : "예정")</strong></span>
+                    <span>방문 횟수: <strong>@(place.VisitCount)</strong></span>
+                </div>
+
+                <a class="small-button"
+                   asp-action="Details"
+                   asp-route-id="@place.Id">
+                    상세 보기
+                </a>
+            </article>
+        }
+    </section>
+}
