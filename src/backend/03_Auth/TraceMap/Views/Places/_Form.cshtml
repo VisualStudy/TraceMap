@@ -1,5 +1,18 @@
 @model TracePlace
 <div asp-validation-summary="ModelOnly" class="validation"></div>
+
+<a class="outline-button full" asp-controller="Map" asp-action="SelectLocation" asp-route-latitude="@Model.Latitude" asp-route-longitude="@Model.Longitude">지도에서 위치 선택</a>
+<div class="coordinate-grid">
+    <div>
+        <label asp-for="Latitude"></label>
+        <input asp-for="Latitude" />
+    </div>
+    <div>
+        <label asp-for="Longitude"></label>
+        <input asp-for="Longitude" />
+    </div>
+</div>
+
 <label asp-for="Name"></label>
 <input asp-for="Name" placeholder="예: 노을이 잘 보이는 계단" />
 <span asp-validation-for="Name" class="validation"></span>
@@ -29,17 +42,6 @@
 <label asp-for="VisitCount"></label>
 <input asp-for="VisitCount" type="number" min="0" />
 
-<div class="coordinate-grid">
-    <div>
-        <label asp-for="Latitude"></label>
-        <input asp-for="Latitude" />
-    </div>
-    <div>
-        <label asp-for="Longitude"></label>
-        <input asp-for="Longitude" />
-    </div>
-</div>
-<a class="outline-button full" asp-controller="Map" asp-action="SelectLocation" asp-route-latitude="@Model.Latitude" asp-route-longitude="@Model.Longitude">지도에서 위치 선택</a>
 
 <div class="check-line">
     <input asp-for="IsShared" />
