@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] - TraceMap</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="phone-shell">
+        <main class="screen">
+            @if (TempData["Message"] is string message)
+            {
+                <div class="toast">@message</div>
+            }
+            @RenderBody()
+            <nav class="bottom-nav">
+                <a asp-controller="Home" asp-action="Index">⌂<span>홈</span></a>
+                <a asp-controller="Map" asp-action="Index">🗺<span>지도</span></a>
+                <a asp-controller="Places" asp-action="Index">☰<span>목록</span></a>
+                <a asp-controller="Challenges" asp-action="Index">🏆<span>도전</span></a>
+            </nav>
+        </main>
+    </div>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,22 @@
+@model IReadOnlyList<TracePlace>
+@{
+    ViewData["Title"] = "추천 스팟";
+}
+<header class="page-header">
+    <h1>추천 스팟</h1>
+    <p>공유 가능한 장소처럼 구성된 추천 장소 목록입니다.</p>
+</header>
+
+<section class="cards">
+@foreach (var place in Model)
+{
+    <article class="place-card recommendation">
+        <div class="card-top">
+            <h2>@place.Name</h2>
+            <span class="badge">@place.Category</span>
+        </div>
+        <p>@(string.IsNullOrWhiteSpace(place.SharedDescription) ? place.Description : place.SharedDescription)</p>
+        <a class="small-button" asp-controller="Places" asp-action="Details" asp-route-id="@place.Id">상세 보기</a>
+    </article>
+}
+</section>

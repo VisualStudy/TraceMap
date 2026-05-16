@@ -1,0 +1,53 @@
+@model TracePlace
+<div asp-validation-summary="ModelOnly" class="validation"></div>
+<label asp-for="Name"></label>
+<input asp-for="Name" placeholder="예: 노을이 잘 보이는 계단" />
+<span asp-validation-for="Name" class="validation"></span>
+
+<label asp-for="Category"></label>
+<select asp-for="Category">
+    <option>산책</option>
+    <option>운동 / 산책</option>
+    <option>사진</option>
+    <option>그래피티 / 사진</option>
+    <option>맛집</option>
+    <option>휴식</option>
+    <option>문화</option>
+</select>
+
+<label asp-for="Description"></label>
+<textarea asp-for="Description" rows="4" placeholder="이 장소가 왜 의미 있는지 적어보세요."></textarea>
+
+<label asp-for="RecommendedActivities"></label>
+<input asp-for="RecommendedActivities" placeholder="예: 산책, 러닝, 사진, 글쓰기" />
+
+<div class="check-line">
+    <input asp-for="IsVisited" />
+    <label asp-for="IsVisited">이미 방문한 장소로 기록</label>
+</div>
+
+<label asp-for="VisitCount"></label>
+<input asp-for="VisitCount" type="number" min="0" />
+
+<div class="coordinate-grid">
+    <div>
+        <label asp-for="Latitude"></label>
+        <input asp-for="Latitude" />
+    </div>
+    <div>
+        <label asp-for="Longitude"></label>
+        <input asp-for="Longitude" />
+    </div>
+</div>
+<a class="outline-button full" asp-controller="Map" asp-action="SelectLocation" asp-route-latitude="@Model.Latitude" asp-route-longitude="@Model.Longitude">지도에서 위치 선택</a>
+
+<div class="check-line">
+    <input asp-for="IsShared" />
+    <label asp-for="IsShared">추천 스팟에 공유 가능</label>
+</div>
+
+<label asp-for="SharedDescription"></label>
+<textarea asp-for="SharedDescription" rows="3" placeholder="다른 사용자에게 추천할 이유를 적어보세요."></textarea>
+
+<label asp-for="PhotoUrl"></label>
+<input asp-for="PhotoUrl" placeholder="나중에 사진 리뷰 기능으로 확장할 URL" />

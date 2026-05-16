@@ -1,0 +1,25 @@
+@{
+    ViewData["Title"] = "지도에서 위치 선택";
+    double lat = ViewBag.Latitude;
+    double lng = ViewBag.Longitude;
+}
+<header class="page-header with-back">
+    <a asp-controller="Places" asp-action="Create">‹</a>
+    <div>
+        <h1>지도에서 위치 선택</h1>
+        <p>실제 지도 패키지 연동 전 단계이므로 좌표 입력과 임시 마커로 위치 선택 흐름을 테스트합니다.</p>
+    </div>
+</header>
+
+<section class="mock-map choose">
+    <div class="map-grid"></div>
+    <span class="marker selected" style="left:50%;top:45%;">📍</span>
+</section>
+
+<form asp-controller="Places" asp-action="Create" method="get" class="edit-form">
+    <label>선택 위도</label>
+    <input name="latitude" value="@lat" />
+    <label>선택 경도</label>
+    <input name="longitude" value="@lng" />
+    <button type="submit" class="primary-button full">이 위치로 설정</button>
+</form>

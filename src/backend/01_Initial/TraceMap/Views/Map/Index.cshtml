@@ -1,0 +1,31 @@
+@model IReadOnlyList<TracePlace>
+@{
+    ViewData["Title"] = "지도 화면";
+    int? selectedId = ViewBag.SelectedId as int?;
+    var selected = selectedId.HasValue ? Model.FirstOrDefault(p => p.Id == selectedId.Value) : Model.FirstOrDefault();
+}
+<header class="page-header">
+    <h1>지도 화면</h1>
+    <p>저장된 장소를 지도형 화면과 마커로 확인합니다. 실제 지도 연동 전에도 전체 흐름을 테스트할 수 있습니다.</p>
+</header>
+
+<section class="mock-map">
+    <div class="map-grid"></div>
+    @foreach (var place in Model)
+    {
+        var left = 18 + Math.Abs(place.Longitude * 10 % 65);
+        var top = 18 + Math.Abs(place.Latitude * 10 % 55);
+        <a class="marker @(selected?.Id == place.Id ? "selected" : "")" style="left:@left%;top:@top%;" asp-action="Index" asp-route-selectedId="@place.Id" title="@place.Name">📍</a>
+    }
+</section>
+
+@if (selected is not null)
+{
+    <section class="selected-place">
+        <p>선택한 장소: <strong>@selected.Name</strong></p>
+        <small>@selected.Category · @selected.Description</small>
+        <a class="primary-button full" asp-controller="Places" asp-action="Details" asp-route-id="@selected.Id">상세 보기</a>
+    </section>
+}
+
+<a class="outline-button full" asp-controller="Places" asp-action="Create">+ 새 장소 추가</a>
