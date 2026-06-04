@@ -1,0 +1,146 @@
+@using System.Text.Json
+@model IReadOnlyList<TracePlace>
+@{
+    ViewData["Title"] = "지도 화면";
+    int? selectedId = ViewBag.SelectedId as int?;
+    var selected = selectedId.HasValue ? Model.FirstOrDefault(p => p.Id == selectedId.Value) : Model.FirstOrDefault();
+    var placesJson = JsonSerializer.Serialize(Model.Select(p => new
+    {
+        id = p.Id,
+        name = p.Name,
+        category = p.Category,
+        description = p.Description,
+        latitude = p.Latitude,
+        longitude = p.Longitude,
+        isVisited = p.IsVisited,
+        visitCount = p.VisitCount,
+        detailsUrl = Url.Action("Details", "Places", new { id = p.Id })
+    }));
+}
+<header class="page-header">
+    <h1>지도 화면</h1>
+    <p>Leaflet과 OpenStreetMap 무료 지도를 사용하여 저장된 장소를 실제 지도 위 마커로 확인합니다.</p>
+</header>
+
+<section id="traceMap" class="leaflet-map" aria-label="TraceMap 지도"></section>
+
+<section id="selectedPlacePanel" class="selected-place @(selected is null ? "hidden" : "")">
+    <p>선택한 장소: <strong id="selectedPlaceName">@(selected?.Name ?? "")</strong></p>
+    <small id="selectedPlaceSummary">@(selected is null ? "" : $"{selected.Category} · {selected.Description}")</small>
+    <a id="selectedPlaceLink" class="primary-button full" href="@(selected is null ? "#" : Url.Action("Details", "Places", new { id = selected.Id }))">상세 보기</a>
+</section>
+
+<a class="outline-button full" asp-controller="Places" asp-action="Create">+ 새 장소 추가</a>
+
+<section class="guide-card map-guide">
+    <strong>지도 사용 방법</strong>
+    <p>마커를 누르면 장소 이름, 카테고리, 설명이 아래 카드에 표시되고, 상세 보기로 이동할 수 있습니다. 산책, 운동, 사진, 그래피티, 맛집, 휴식 등 카테고리에 따라 마커 아이콘을 다르게 표시했습니다.</p>
+</section>
+
+@section Scripts {
+    <script>
+        (function () {
+            const places = @Html.Raw(placesJson);
+            const selectedId = @(selected?.Id.ToString() ?? "null");
+            const defaultCenter = [34.9501, 127.4872];
+            const center = places.length > 0
+                ? [places[0].latitude || defaultCenter[0], places[0].longitude || defaultCenter[1]]
+                : defaultCenter;
+
+            const map = L.map('traceMap', {
+                zoomControl: true,
+                scrollWheelZoom: false
+            }).setView(center, 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            const bounds = [];
+            const markers = new Map();
+
+            function getCategoryIcon(place) {
+                const category = (place.category || '').toLowerCase();
+                if (category.includes('운동')) return { emoji: '🏃', cls: 'exercise' };
+                if (category.includes('사진')) return { emoji: '📷', cls: 'photo' };
+                if (category.includes('그래피티')) return { emoji: '🎨', cls: 'art' };
+                if (category.includes('맛집')) return { emoji: '🍽', cls: 'food' };
+                if (category.includes('휴식')) return { emoji: '🌿', cls: 'rest' };
+                if (category.includes('문화')) return { emoji: '🏛', cls: 'culture' };
+                return { emoji: '📍', cls: 'walk' };
+            }
+
+            function createIcon(place, isSelected) {
+                const icon = getCategoryIcon(place);
+                return L.divIcon({
+                    className: 'leaflet-trace-marker-wrap',
+                    html: `<span class="leaflet-trace-marker ${icon.cls}${isSelected ? ' selected' : ''}">${icon.emoji}</span>`,
+                    iconSize: [38, 38],
+                    iconAnchor: [19, 34],
+                    popupAnchor: [0, -28]
+                });
+            }
+
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replaceAll('&', '&amp;')
+                    .replaceAll('<', '&lt;')
+                    .replaceAll('>', '&gt;')
+                    .replaceAll('\"', '&quot;')
+                    .replaceAll("'", '&#039;');
+            }
+
+            function setSelected(place) {
+                document.getElementById('selectedPlacePanel').classList.remove('hidden');
+                document.getElementById('selectedPlaceName').textContent = place.name;
+                document.getElementById('selectedPlaceSummary').textContent = `${place.category} · ${place.description}`;
+                document.getElementById('selectedPlaceLink').setAttribute('href', place.detailsUrl);
+
+                for (const item of places) {
+                    const marker = markers.get(item.id);
+                    if (marker) {
+                        marker.setIcon(createIcon(item, item.id === place.id));
+                    }
+                }
+            }
+
+            places.forEach(function (place) {
+                if (!place.latitude || !place.longitude) return;
+
+                const marker = L.marker([place.latitude, place.longitude], {
+                    icon: createIcon(place, place.id === selectedId)
+                }).addTo(map);
+
+                marker.bindPopup(`
+                    <strong>${escapeHtml(place.name)}</strong><br />
+                    <span>${escapeHtml(place.category)}</span><br />
+                    <small>${place.isVisited ? '방문 완료' : '방문 예정'} · 방문 ${place.visitCount}회</small><br />
+                    <a href="${place.detailsUrl}">상세 보기</a>
+                `);
+
+                marker.on('click', function () {
+                    setSelected(place);
+                });
+
+                markers.set(place.id, marker);
+                bounds.push([place.latitude, place.longitude]);
+            });
+
+            if (bounds.length > 1) {
+                map.fitBounds(bounds, { padding: [28, 28] });
+            }
+
+            if (selectedId !== null && markers.has(selectedId)) {
+                const selectedMarker = markers.get(selectedId);
+                selectedMarker.openPopup();
+                const selectedPlace = places.find(p => p.id === selectedId);
+                if (selectedPlace) setSelected(selectedPlace);
+            }
+
+            setTimeout(function () {
+                map.invalidateSize();
+            }, 150);
+        })();
+    </script>
+}

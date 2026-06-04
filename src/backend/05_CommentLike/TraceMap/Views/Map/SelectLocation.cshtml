@@ -1,0 +1,90 @@
+@{
+    ViewData["Title"] = "지도에서 위치 선택";
+    double lat = ViewBag.Latitude;
+    double lng = ViewBag.Longitude;
+}
+<header class="page-header with-back">
+    <a asp-controller="Places" asp-action="Create">‹</a>
+    <div>
+        <h1>지도에서 위치 선택</h1>
+        <p>OpenStreetMap 지도에서 원하는 지점을 누른 뒤 이 위치로 설정을 선택합니다.</p>
+    </div>
+</header>
+
+<section id="selectLocationMap" class="leaflet-map choose" aria-label="장소 위치 선택 지도"></section>
+
+<form asp-controller="Places" asp-action="Create" method="get" class="edit-form location-form">
+    <label>선택 위도</label>
+    <input id="selectedLatitude" name="latitude" value="@lat" />
+    <label>선택 경도</label>
+    <input id="selectedLongitude" name="longitude" value="@lng" />
+    <p class="input-help">지도를 누르면 위도와 경도가 자동으로 바뀝니다. 직접 숫자를 수정해도 됩니다.</p>
+    <button type="submit" class="primary-button full">이 위치로 설정</button>
+    <a class="outline-button full" asp-controller="Places" asp-action="Create">취소</a>
+</form>
+
+@section Scripts {
+    <script>
+        (function () {
+            const startLat = Number('@lat'.replace(',', '.')) || 34.9501;
+            const startLng = Number('@lng'.replace(',', '.')) || 127.4872;
+            const latInput = document.getElementById('selectedLatitude');
+            const lngInput = document.getElementById('selectedLongitude');
+
+            const map = L.map('selectLocationMap', {
+                zoomControl: true,
+                scrollWheelZoom: false
+            }).setView([startLat, startLng], 14);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            const icon = L.divIcon({
+                className: 'leaflet-trace-marker-wrap',
+                html: '<span class="leaflet-trace-marker selected">📍</span>',
+                iconSize: [42, 42],
+                iconAnchor: [21, 38],
+                popupAnchor: [0, -30]
+            });
+
+            let marker = L.marker([startLat, startLng], { icon: icon }).addTo(map);
+            marker.bindPopup('선택한 위치').openPopup();
+
+            function updateLocation(latlng) {
+                latInput.value = latlng.lat.toFixed(6);
+                lngInput.value = latlng.lng.toFixed(6);
+                marker.setLatLng(latlng).openPopup();
+            }
+
+            map.on('click', function (e) {
+                updateLocation(e.latlng);
+            });
+
+            latInput.addEventListener('change', function () {
+                const lat = Number(latInput.value);
+                const lng = Number(lngInput.value);
+                if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+                    const latlng = L.latLng(lat, lng);
+                    marker.setLatLng(latlng);
+                    map.setView(latlng, map.getZoom());
+                }
+            });
+
+            lngInput.addEventListener('change', function () {
+                const lat = Number(latInput.value);
+                const lng = Number(lngInput.value);
+                if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+                    const latlng = L.latLng(lat, lng);
+                    marker.setLatLng(latlng);
+                    map.setView(latlng, map.getZoom());
+                }
+            });
+
+            setTimeout(function () {
+                map.invalidateSize();
+            }, 150);
+        })();
+    </script>
+}

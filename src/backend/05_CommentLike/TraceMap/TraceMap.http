@@ -1,0 +1,58 @@
+@host = http://localhost:5078
+
+### MVC Home
+GET {{host}}/
+
+### Pages API
+GET {{host}}/api/pages
+
+### Places API
+GET {{host}}/api/places
+
+### Create a place
+POST {{host}}/api/places
+Content-Type: application/json
+
+{
+  "name": "조용한 골목길",
+  "category": "휴식",
+  "description": "사람이 많지 않아 생각을 정리하기 좋은 길입니다.",
+  "recommendedActivities": "산책, 글쓰기",
+  "isVisited": false,
+  "visitCount": 0,
+  "latitude": 34.9512,
+  "longitude": 127.4931,
+  "isShared": true,
+  "sharedDescription": "조용히 걷기 좋은 개인 추천 스팟입니다."
+}
+
+### Challenges API
+GET {{host}}/api/challenges
+
+### Register Identity API
+POST {{host}}/api/identity/register
+Content-Type: application/json
+
+{
+  "email": "user@tracemap.com",
+  "password": "Pa$$w0rd"
+}
+
+### Login Identity API
+# @name login
+POST {{host}}/api/identity/login?useCookies=false
+Content-Type: application/json
+
+{
+  "email": "administrator@tracemap.com",
+  "password": "Pa$$w0rd"
+}
+
+### Secure API with bearer token
+@accessToken = {{login.response.body.$.accessToken}}
+GET {{host}}/api/secure
+Authorization: Bearer {{accessToken}}
+
+### Me API
+GET {{host}}/api/auth/me
+Authorization: Bearer {{accessToken}}
