@@ -1,0 +1,43 @@
+@model TraceMap.ViewModels.RegisterViewModel
+@{
+    ViewData["Title"] = "회원가입";
+}
+
+<header class="page-header with-back">
+    <a asp-controller="Home" asp-action="Index" aria-label="뒤로 가기">‹</a>
+    <div>
+        <h1>회원가입</h1>
+        <p>In-Memory Identity DB에 테스트 사용자를 생성합니다.</p>
+    </div>
+</header>
+
+<section class="auth-panel">
+    <form asp-action="Register" method="post" class="edit-form">
+        <input asp-for="ReturnUrl" type="hidden" />
+        <div asp-validation-summary="ModelOnly" class="validation"></div>
+
+        <label asp-for="DisplayName"></label>
+        <input asp-for="DisplayName" autocomplete="name" placeholder="TraceMap 사용자" />
+        <span asp-validation-for="DisplayName" class="validation"></span>
+
+        <label asp-for="Email"></label>
+        <input asp-for="Email" autocomplete="username" placeholder="user@example.com" />
+        <span asp-validation-for="Email" class="validation"></span>
+
+        <label asp-for="Password"></label>
+        <input asp-for="Password" autocomplete="new-password" placeholder="대문자, 소문자, 숫자, 특수문자 포함" />
+        <span asp-validation-for="Password" class="validation"></span>
+
+        <label asp-for="ConfirmPassword"></label>
+        <input asp-for="ConfirmPassword" autocomplete="new-password" />
+        <span asp-validation-for="ConfirmPassword" class="validation"></span>
+
+        <button type="submit" class="primary-button full">회원가입</button>
+    </form>
+
+    <div class="auth-help">
+        <strong>이미 계정이 있나요?</strong>
+        <p>로그인 후 우측 상단의 회원정보에서 현재 사용자 정보를 확인할 수 있습니다.</p>
+        <a asp-controller="Account" asp-action="Login" asp-route-returnUrl="@Model.ReturnUrl">로그인으로 이동</a>
+    </div>
+</section>
