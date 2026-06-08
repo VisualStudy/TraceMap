@@ -1,0 +1,40 @@
+@model TraceMap.ViewModels.LoginViewModel
+@{
+    ViewData["Title"] = "로그인";
+}
+
+<header class="page-header with-back">
+    <a asp-controller="Home" asp-action="Index" aria-label="뒤로 가기">‹</a>
+    <div>
+        <h1>로그인</h1>
+        <p>TraceMap MVC 화면과 Flutter 연동 API를 같은 계정으로 테스트할 수 있습니다.</p>
+    </div>
+</header>
+
+<section class="auth-panel">
+    <form asp-action="Login" method="post" class="edit-form">
+        <input asp-for="ReturnUrl" type="hidden" />
+        <div asp-validation-summary="ModelOnly" class="validation"></div>
+
+        <label asp-for="Email"></label>
+        <input asp-for="Email" autocomplete="username" placeholder="administrator@tracemap.com" />
+        <span asp-validation-for="Email" class="validation"></span>
+
+        <label asp-for="Password"></label>
+        <input asp-for="Password" autocomplete="current-password" placeholder="Pa$$w0rd" />
+        <span asp-validation-for="Password" class="validation"></span>
+
+        <label class="check-line">
+            <input asp-for="RememberMe" />
+            <span>로그인 유지</span>
+        </label>
+
+        <button type="submit" class="primary-button full">로그인</button>
+    </form>
+
+    <div class="auth-help">
+        <strong>기본 테스트 계정</strong>
+        <p>administrator@tracemap.com / Pa$$w0rd</p>
+        <a asp-controller="Account" asp-action="Register" asp-route-returnUrl="@Model.ReturnUrl">새 계정 만들기</a>
+    </div>
+</section>
