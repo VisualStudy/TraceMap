@@ -1,0 +1,29 @@
+@model IReadOnlyList<ChallengeStatus>
+@{
+    ViewData["Title"] = "도전과제";
+    var completed = Model.Count(c => c.IsCompleted);
+}
+<header class="page-header">
+    <h1>도전과제</h1>
+    <p>장소 추가와 방문 기록을 바탕으로 자동 계산됩니다.</p>
+</header>
+
+<section class="challenge-list">
+@foreach (var item in Model)
+{
+    <article class="challenge-card @(item.IsCompleted ? "done" : "")">
+        <span class="check">@(item.IsCompleted ? "☑" : "☐")</span>
+        <div>
+            <h2>@item.Title</h2>
+            <p>@item.Description</p>
+            <div class="progress"><span style="width:@(item.Target == 0 ? 0 : item.Current * 100 / item.Target)%"></span></div>
+            <small>@item.Current / @item.Target</small>
+        </div>
+    </article>
+}
+</section>
+
+<section class="summary-card">
+    <strong>완료한 도전과제: @completed / @Model.Count</strong>
+    <p>장소를 새로 추가하거나 방문 횟수를 늘리면 진행 상태가 바뀝니다.</p>
+</section>

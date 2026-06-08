@@ -1,0 +1,36 @@
+@model TraceMap.ViewModels.ProfileViewModel
+@{
+    ViewData["Title"] = "회원정보";
+}
+
+<header class="page-header with-back">
+    <a asp-controller="Home" asp-action="Index" aria-label="뒤로 가기">‹</a>
+    <div>
+        <h1>회원정보</h1>
+        <p>인증된 사용자만 접근하는 MVC 화면입니다.</p>
+    </div>
+</header>
+
+<section class="detail-panel">
+    <dl>
+        <dt>로그인 상태</dt>
+        <dd>로그인됨</dd>
+        <dt>표시 이름</dt>
+        <dd>@Model.DisplayName</dd>
+        <dt>이메일</dt>
+        <dd>@Model.Email</dd>
+        <dt>사용자 이름</dt>
+        <dd>@Model.UserName</dd>
+        <dt>이메일 확인 여부</dt>
+        <dd>@(Model.EmailConfirmed ? "확인됨" : "미확인")</dd>
+    </dl>
+</section>
+
+<section class="guide-card">
+    <h2>Flutter 인증 API 테스트</h2>
+    <p>Flutter 앱에서는 같은 계정으로 <code>/api/identity/login?useCookies=false</code>를 호출하고, 응답의 Bearer 토큰을 저장해 보호된 API에 전달하면 됩니다.</p>
+    <a class="outline-button full" asp-controller="Home" asp-action="Index">홈으로 이동</a>
+    <form asp-controller="Account" asp-action="Logout" method="post">
+        <button type="submit" class="danger-button full">로그아웃</button>
+    </form>
+</section>
