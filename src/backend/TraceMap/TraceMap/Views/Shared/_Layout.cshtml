@@ -9,37 +9,56 @@
     @await RenderSectionAsync("Head", required: false)
 </head>
 <body>
-    <div class="phone-shell">
+    @{
+        var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    }
+    <div class="app-shell">
+        <header class="top-auth-bar">
+            <a class="brand-link" asp-controller="Home" asp-action="Index" aria-label="TraceMap 홈으로 이동">
+                <span class="brand-mark">📍</span>
+                <span>TraceMap</span>
+            </a>
+            <div class="auth-actions">
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <a asp-controller="Account" asp-action="Profile" title="회원정보">👤 @User.Identity.Name</a>
+                    <form asp-controller="Account" asp-action="Logout" method="post">
+                        <button type="submit">로그아웃</button>
+                    </form>
+                }
+                else
+                {
+                    <a asp-controller="Account" asp-action="Login">로그인</a>
+                    <a asp-controller="Account" asp-action="Register">회원가입</a>
+                }
+            </div>
+        </header>
+
         <main class="screen">
-            <header class="top-auth-bar">
-                <a class="brand-link" asp-controller="Home" asp-action="Index">📍 TraceMap</a>
-                <div class="auth-actions">
-                    @if (User.Identity?.IsAuthenticated == true)
-                    {
-                        <a asp-controller="Account" asp-action="Profile" title="회원정보">👤 @User.Identity.Name</a>
-                        <form asp-controller="Account" asp-action="Logout" method="post">
-                            <button type="submit">로그아웃</button>
-                        </form>
-                    }
-                    else
-                    {
-                        <a asp-controller="Account" asp-action="Login">로그인</a>
-                        <a asp-controller="Account" asp-action="Register">회원가입</a>
-                    }
-                </div>
-            </header>
             @if (TempData["Message"] is string message)
             {
                 <div class="toast">@message</div>
             }
             @RenderBody()
-            <nav class="bottom-nav">
-                <a asp-controller="Home" asp-action="Index">⌂<span>홈</span></a>
-                <a asp-controller="Map" asp-action="Index">🗺<span>지도</span></a>
-                <a asp-controller="Places" asp-action="Index">☰<span>목록</span></a>
-                <a asp-controller="Challenges" asp-action="Index">🏆<span>도전</span></a>
-            </nav>
         </main>
+
+        <nav class="bottom-nav" aria-label="TraceMap 주요 메뉴">
+            <a class="@(currentController == "Home" ? "active" : "")" asp-controller="Home" asp-action="Index">
+                <span class="nav-icon">⌂</span><span>홈</span>
+            </a>
+            <a class="@(currentController == "Map" ? "active" : "")" asp-controller="Map" asp-action="Index">
+                <span class="nav-icon">🗺</span><span>지도</span>
+            </a>
+            <a class="@(currentController == "Places" ? "active" : "")" asp-controller="Places" asp-action="Index">
+                <span class="nav-icon">☰</span><span>목록</span>
+            </a>
+            <a class="@(currentController == "Challenges" ? "active" : "")" asp-controller="Challenges" asp-action="Index">
+                <span class="nav-icon">🏆</span><span>도전</span>
+            </a>
+            <a class="@(currentController == "Recommendations" ? "active" : "")" asp-controller="Recommendations" asp-action="Index">
+                <span class="nav-icon">★</span><span>추천</span>
+            </a>
+        </nav>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     @await RenderSectionAsync("Scripts", required: false)
