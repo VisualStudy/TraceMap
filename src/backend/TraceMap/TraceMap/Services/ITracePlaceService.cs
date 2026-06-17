@@ -1,4 +1,4 @@
-﻿using TraceMap.Models;
+using TraceMap.Models;
 
 namespace TraceMap.Services;
 
