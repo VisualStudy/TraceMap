@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -544,7 +545,6 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
                   DetailRow(icon: Icons.star, label: '공유 여부', value: place.isShared ? '공유 가능' : '개인 기록'),
                   DetailRow(icon: Icons.photo_library, label: '사진', value: '${place.photoCount}장'),
                   if (place.sharedDescription.isNotEmpty) DetailRow(icon: Icons.share, label: '공유 설명', value: place.sharedDescription),
-                  if ((place.photoUrl ?? '').isNotEmpty) DetailRow(icon: Icons.image, label: '사진 URL', value: place.photoUrl!),
                 ]),
               ),
             ),
@@ -799,7 +799,6 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
   late final TextEditingController description;
   late final TextEditingController activities;
   late final TextEditingController sharedDescription;
-  late final TextEditingController photoUrl;
   String category = '산책';
   bool isVisited = false;
   bool isShared = false;
@@ -818,7 +817,6 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
     description = TextEditingController(text: p?.description ?? '');
     activities = TextEditingController(text: p?.recommendedActivities ?? '');
     sharedDescription = TextEditingController(text: p?.sharedDescription ?? '');
-    photoUrl = TextEditingController(text: p?.photoUrl ?? '');
     category = categories.contains(p?.category) ? p!.category : (p?.category ?? '산책');
     isVisited = p?.isVisited ?? false;
     isShared = p?.isShared ?? false;
@@ -833,7 +831,6 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
     description.dispose();
     activities.dispose();
     sharedDescription.dispose();
-    photoUrl.dispose();
     super.dispose();
   }
 
@@ -852,7 +849,8 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
       longitude: longitude,
       isShared: isShared,
       sharedDescription: sharedDescription.text.trim(),
-      photoUrl: photoUrl.text.trim().isEmpty ? null : photoUrl.text.trim(),
+      // 더 이상 화면에 표시하지 않는 확장용 값은 수정 시 기존 값을 유지합니다.
+      photoUrl: widget.existing?.photoUrl,
     );
     try {
       if (widget.existing == null) {
@@ -902,8 +900,6 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
               ),
               SwitchListTile(title: const Text('추천 스팟에 공유 가능'), value: isShared, onChanged: (v) => setState(() => isShared = v)),
               TextFormField(controller: sharedDescription, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '공유용 설명')),
-              const SizedBox(height: 10),
-              TextFormField(controller: photoUrl, decoration: const InputDecoration(labelText: '사진 리뷰 URL')),
               const SizedBox(height: 14),
               Card(child: ListTile(
                 leading: const Icon(Icons.my_location),
@@ -1236,11 +1232,31 @@ class ApiClient {
 
   Future<List<PlacePhoto>> uploadPlacePhotos(int placeId, List<XFile> files) async {
     final request = http.MultipartRequest('POST', uri('/api/places/$placeId/photos'));
+    request.headers['Accept'] = 'application/json';
     if (accessToken != null) request.headers['Authorization'] = 'Bearer $accessToken';
 
     for (final file in files) {
-      request.files.add(await http.MultipartFile.fromPath('files', file.path));
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) continue;
+
+      final contentType = resolveImageContentType(
+        fileName: file.name,
+        mimeType: file.mimeType,
+        bytes: bytes,
+      );
+      final uploadFileName = safeUploadImageFileName(file.name, contentType);
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'files',
+          bytes,
+          filename: uploadFileName,
+          contentType: MediaType.parse(contentType),
+        ),
+      );
     }
+
+    if (request.files.isEmpty) throw Exception('업로드할 사진을 찾지 못했습니다.');
 
     final streamed = await _http.send(request);
     final response = await http.Response.fromStream(streamed);
@@ -1260,6 +1276,122 @@ class ApiClient {
     final list = jsonDecode(response.body) as List<dynamic>;
     return list.map((e) => ChallengeStatus.fromJson(e as Map<String, dynamic>)).toList();
   }
+}
+
+
+String resolveImageContentType({
+  required String fileName,
+  required String? mimeType,
+  required List<int> bytes,
+}) {
+  final supplied = mimeType?.trim().toLowerCase();
+  if (supplied != null && supplied.startsWith('image/')) {
+    if (supplied == 'image/jpg') return 'image/jpeg';
+    return supplied;
+  }
+
+  final extension = imageExtensionFromName(fileName);
+  final fromExtension = contentTypeFromExtension(extension);
+  if (fromExtension != null) return fromExtension;
+
+  final fromBytes = contentTypeFromImageBytes(bytes);
+  if (fromBytes != null) return fromBytes;
+
+  // image_picker가 이미지만 반환하므로, 일부 Android 기기에서 MIME 정보와 확장자가
+  // 누락되는 경우에도 서버가 application/octet-stream으로 오인하지 않도록 기본값을 지정한다.
+  return 'image/jpeg';
+}
+
+String safeUploadImageFileName(String originalName, String contentType) {
+  final rawName = originalName.trim().split(RegExp(r'[\/]')).last;
+  final baseName = rawName.isEmpty ? 'photo' : rawName;
+  final extension = imageExtensionFromName(baseName);
+
+  if (contentTypeFromExtension(extension) != null) {
+    return baseName;
+  }
+
+  final dotIndex = baseName.lastIndexOf('.');
+  final nameOnly = dotIndex > 0 ? baseName.substring(0, dotIndex) : baseName;
+  final safeName = nameOnly
+      .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+  return '${safeName.isEmpty ? 'photo' : safeName}.${extensionFromContentType(contentType)}';
+}
+
+String imageExtensionFromName(String fileName) {
+  final cleanName = fileName.trim().split(RegExp(r'[\/]')).last;
+  final dotIndex = cleanName.lastIndexOf('.');
+  if (dotIndex < 0 || dotIndex == cleanName.length - 1) return '';
+  return cleanName.substring(dotIndex).toLowerCase();
+}
+
+String? contentTypeFromExtension(String extension) => switch (extension.toLowerCase()) {
+      '.jpg' || '.jpeg' => 'image/jpeg',
+      '.png' => 'image/png',
+      '.webp' => 'image/webp',
+      '.gif' => 'image/gif',
+      '.heic' => 'image/heic',
+      '.heif' => 'image/heif',
+      _ => null,
+    };
+
+String extensionFromContentType(String contentType) => switch (contentType.toLowerCase()) {
+      'image/png' => 'png',
+      'image/webp' => 'webp',
+      'image/gif' => 'gif',
+      'image/heic' => 'heic',
+      'image/heif' => 'heif',
+      _ => 'jpg',
+    };
+
+String? contentTypeFromImageBytes(List<int> bytes) {
+  if (bytes.length >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 8 &&
+      bytes[0] == 0x89 &&
+      bytes[1] == 0x50 &&
+      bytes[2] == 0x4e &&
+      bytes[3] == 0x47 &&
+      bytes[4] == 0x0d &&
+      bytes[5] == 0x0a &&
+      bytes[6] == 0x1a &&
+      bytes[7] == 0x0a) {
+    return 'image/png';
+  }
+  if (bytes.length >= 6 &&
+      bytes[0] == 0x47 &&
+      bytes[1] == 0x49 &&
+      bytes[2] == 0x46 &&
+      bytes[3] == 0x38 &&
+      (bytes[4] == 0x37 || bytes[4] == 0x39) &&
+      bytes[5] == 0x61) {
+    return 'image/gif';
+  }
+  if (bytes.length >= 12 &&
+      bytes[0] == 0x52 &&
+      bytes[1] == 0x49 &&
+      bytes[2] == 0x46 &&
+      bytes[3] == 0x46 &&
+      bytes[8] == 0x57 &&
+      bytes[9] == 0x45 &&
+      bytes[10] == 0x42 &&
+      bytes[11] == 0x50) {
+    return 'image/webp';
+  }
+  if (bytes.length >= 12 &&
+      bytes[4] == 0x66 &&
+      bytes[5] == 0x74 &&
+      bytes[6] == 0x79 &&
+      bytes[7] == 0x70) {
+    final brand = String.fromCharCodes(bytes.sublist(8, 12)).toLowerCase();
+    if (brand.startsWith('hei') || brand.startsWith('heic') || brand.startsWith('heix') || brand.startsWith('hevc') || brand.startsWith('hevx')) {
+      return brand.contains('f') ? 'image/heif' : 'image/heic';
+    }
+  }
+  return null;
 }
 
 class ApiException implements Exception {
