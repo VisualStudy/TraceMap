@@ -11,9 +11,9 @@ public class ChallengeService : IChallengeService
         _places = places;
     }
 
-    public async Task<List<ChallengeStatus>> GetStatusesAsync()
+    public async Task<List<ChallengeStatus>> GetStatusesAsync(string? userId)
     {
-        var places = await _places.GetAllAsync();
+        var places = await _places.GetAllAsync(userId);
         var visited = places.Where(p => p.IsVisited || p.VisitCount > 0).ToList();
         var walkingVisitedCount = visited.Count(p => p.Category.Contains("산책", StringComparison.OrdinalIgnoreCase));
         var exerciseVisitedCount = visited.Count(p => p.Category.Contains("운동", StringComparison.OrdinalIgnoreCase));

@@ -24,6 +24,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final ApiClient api = ApiClient(apiBaseUrl);
   List<TracePlace> places = [];
+  List<TracePlace> sharedPlaces = [];
   List<ChallengeStatus> challenges = [];
   AuthUser? user;
   bool isLoading = true;
@@ -37,8 +38,8 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _initialize() async {
     await api.loadSavedToken();
-    await refreshAll(showLoading: true);
     await refreshUser(silent: true);
+    await refreshAll(showLoading: true);
   }
 
   Future<void> refreshAll({bool showLoading = false}) async {
@@ -46,11 +47,13 @@ class _MyAppState extends State<MyApp> {
     try {
       final results = await Future.wait([
         api.getPlaces(),
+        api.getSharedPlaces(),
         api.getChallenges(),
       ]);
       setState(() {
         places = results[0] as List<TracePlace>;
-        challenges = results[1] as List<ChallengeStatus>;
+        sharedPlaces = results[1] as List<TracePlace>;
+        challenges = results[2] as List<ChallengeStatus>;
         isLoading = false;
       });
     } catch (e) {
@@ -86,8 +89,11 @@ class _MyAppState extends State<MyApp> {
     await api.clearToken();
     setState(() {
       user = null;
+      places = [];
+      challenges = [];
       selectedIndex = 0;
     });
+    await refreshAll();
   }
 
   @override
@@ -111,6 +117,7 @@ class _MyAppState extends State<MyApp> {
           : TraceShell(
               api: api,
               places: places,
+              sharedPlaces: sharedPlaces,
               challenges: challenges,
               user: user,
               selectedIndex: selectedIndex,
@@ -128,6 +135,7 @@ class TraceShell extends StatelessWidget {
     super.key,
     required this.api,
     required this.places,
+    required this.sharedPlaces,
     required this.challenges,
     required this.user,
     required this.selectedIndex,
@@ -139,6 +147,7 @@ class TraceShell extends StatelessWidget {
 
   final ApiClient api;
   final List<TracePlace> places;
+  final List<TracePlace> sharedPlaces;
   final List<ChallengeStatus> challenges;
   final AuthUser? user;
   final int selectedIndex;
@@ -149,13 +158,12 @@ class TraceShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shared = places.where((p) => p.isShared).toList();
     final screens = [
       HomeScreen(places: places, challenges: challenges, user: user, onTabChanged: onTabChanged, onRefresh: onRefresh),
-      MapScreen(places: places, onRefresh: onRefresh),
+      MapScreen(places: places, isSignedIn: user != null, onRefresh: onRefresh),
       PlacesScreen(api: api, places: places, onRefresh: onRefresh),
-      ChallengesScreen(challenges: challenges, onRefresh: onRefresh),
-      RecommendationsScreen(places: shared, onRefresh: onRefresh),
+      ChallengesScreen(challenges: challenges, isSignedIn: user != null, onRefresh: onRefresh),
+      RecommendationsScreen(places: sharedPlaces, onRefresh: onRefresh),
     ];
 
     return Scaffold(
@@ -210,8 +218,9 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final completed = challenges.where((c) => c.isCompleted).length;
-    final visited = places.where((p) => p.isVisited).length;
+    final isSignedIn = user != null;
+    final completed = isSignedIn ? challenges.where((c) => c.isCompleted).length : 0;
+    final visited = isSignedIn ? places.where((p) => p.isVisited).length : 0;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -221,9 +230,9 @@ class HomeScreen extends StatelessWidget {
         const Text('나의 발자취를 지도에 남기다', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
         const SizedBox(height: 20),
         Row(children: [
-          Expanded(child: StatCard(title: '기록 장소', value: '${places.length}')),
-          Expanded(child: StatCard(title: '방문 완료', value: '$visited')),
-          Expanded(child: StatCard(title: '도전과제', value: '$completed/${challenges.length}')),
+          Expanded(child: StatCard(title: '기록 장소', value: isSignedIn ? '${places.length}' : '-')),
+          Expanded(child: StatCard(title: '방문 완료', value: isSignedIn ? '$visited' : '-')),
+          Expanded(child: StatCard(title: '도전과제', value: isSignedIn ? '$completed/${challenges.length}' : '-')),
         ]),
         const SizedBox(height: 20),
         MenuTile(icon: Icons.map, title: '지도에서 스팟 보기', onTap: () => onTabChanged(1)),
@@ -234,8 +243,8 @@ class HomeScreen extends StatelessWidget {
         InfoCard(
           title: user == null ? '인증 기능' : '${user!.displayName}님, 환영합니다.',
           body: user == null
-              ? '오른쪽 상단 로그인 버튼에서 Azure Web App의 /api/identity 인증 API로 회원가입과 로그인을 테스트할 수 있습니다.'
-              : '현재 라이브 Azure Web API에 로그인된 상태입니다. 장소 목록, 지도, 도전과제는 원격 Web API 데이터로 표시됩니다.',
+              ? '기록 장소 카운트, 내 장소 목록, 지도, 도전과제는 로그인 후 본인 계정 기준으로 제공됩니다. 비회원은 추천 스팟에 공유된 장소만 볼 수 있습니다.'
+              : '현재 라이브 Azure Web API에 로그인된 상태입니다. 내 장소 목록과 지도에는 내가 등록한 장소만 표시되고, 공유한 장소만 추천 스팟에 공개됩니다.',
         ),
       ],
     );
@@ -293,8 +302,9 @@ class InfoCard extends StatelessWidget {
 }
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key, required this.places, required this.onRefresh});
+  const MapScreen({super.key, required this.places, required this.isSignedIn, required this.onRefresh});
   final List<TracePlace> places;
+  final bool isSignedIn;
   final Future<void> Function({bool showLoading}) onRefresh;
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -305,12 +315,22 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.isSignedIn) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: const [
+          ScreenHeader(title: '지도 화면', subtitle: '내가 기록한 장소의 마커는 로그인 후 확인할 수 있습니다.'),
+          InfoCard(title: '로그인 필요', body: '비회원은 개인 장소 지도를 볼 수 없습니다. 공개된 장소는 추천 스팟에서 확인해 주세요.'),
+        ],
+      );
+    }
+
     final places = widget.places.where((p) => p.latitude != 0 && p.longitude != 0).toList();
     final center = places.isNotEmpty ? LatLng(places.first.latitude, places.first.longitude) : const LatLng(34.9501, 127.4872);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const ScreenHeader(title: '지도 화면', subtitle: 'OpenStreetMap 지도로 저장된 장소의 마커를 확인합니다.'),
+        const ScreenHeader(title: '지도 화면', subtitle: 'OpenStreetMap 지도에서 내가 등록한 장소의 마커만 확인합니다.'),
         ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: SizedBox(
@@ -361,7 +381,7 @@ class PlacesScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Row(children: [
-            const Expanded(child: ScreenHeader(title: '내 장소 목록', subtitle: '원격 Web API에서 불러온 장소 목록입니다.')),
+            const Expanded(child: ScreenHeader(title: '내 장소 목록', subtitle: '로그인한 계정이 직접 추가한 장소만 표시합니다.')),
             FilledButton.icon(
               onPressed: () async {
                 if (!api.isSignedIn) {
@@ -374,7 +394,9 @@ class PlacesScreen extends StatelessWidget {
               label: const Text('추가'),
             ),
           ]),
-          if (places.isEmpty)
+          if (!api.isSignedIn)
+            const InfoCard(title: '로그인 필요', body: '내 장소 목록은 로그인한 사용자만 사용할 수 있습니다. 공개된 장소는 추천 스팟에서 확인해 주세요.')
+          else if (places.isEmpty)
             const InfoCard(title: '장소 없음', body: '오른쪽 위 추가 버튼으로 새 장소를 기록해 보세요.')
           else
             ...places.map((p) => PlaceSummaryCard(place: p, onTap: () => openDetails(context, p, onRefresh))),
@@ -594,6 +616,7 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
               api: widget.api,
               photos: photos,
               isSignedIn: widget.api.isSignedIn,
+              canModify: place.canModify,
               busy: busy,
               onUpload: _uploadPhotos,
               onDelete: _deletePhoto,
@@ -620,6 +643,7 @@ class PhotoSection extends StatelessWidget {
     required this.api,
     required this.photos,
     required this.isSignedIn,
+    required this.canModify,
     required this.busy,
     required this.onUpload,
     required this.onDelete,
@@ -628,6 +652,7 @@ class PhotoSection extends StatelessWidget {
   final ApiClient api;
   final List<PlacePhoto> photos;
   final bool isSignedIn;
+  final bool canModify;
   final bool busy;
   final VoidCallback onUpload;
   final ValueChanged<PlacePhoto> onDelete;
@@ -640,16 +665,18 @@ class PhotoSection extends StatelessWidget {
             Row(children: [
               Expanded(child: Text('장소 사진 갤러리', style: Theme.of(context).textTheme.titleLarge)),
               FilledButton.icon(
-                onPressed: isSignedIn && !busy ? onUpload : null,
+                onPressed: canModify && !busy ? onUpload : null,
                 icon: const Icon(Icons.add_photo_alternate),
                 label: const Text('사진 업로드'),
               ),
             ]),
             const SizedBox(height: 6),
             Text(
-              isSignedIn
-                  ? '사진은 앱 서버의 뷰어 API를 통해 표시됩니다. Blob URL은 직접 노출하지 않습니다.'
-                  : '사진 업로드는 로그인한 사용자만 사용할 수 있습니다.',
+              !isSignedIn
+                  ? '사진 업로드는 로그인한 사용자만 사용할 수 있습니다.'
+                  : canModify
+                      ? '사진은 앱 서버의 뷰어 API를 통해 표시됩니다. Blob URL은 직접 노출하지 않습니다.'
+                      : '사진 업로드와 삭제는 이 장소를 등록한 사용자만 사용할 수 있습니다.',
               style: const TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 12),
@@ -696,7 +723,7 @@ class PhotoSection extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (isSignedIn)
+                      if (canModify)
                         Positioned(
                           top: 4,
                           right: 4,
@@ -977,15 +1004,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 }
 
 class ChallengesScreen extends StatelessWidget {
-  const ChallengesScreen({super.key, required this.challenges, required this.onRefresh});
+  const ChallengesScreen({super.key, required this.challenges, required this.isSignedIn, required this.onRefresh});
   final List<ChallengeStatus> challenges;
+  final bool isSignedIn;
   final Future<void> Function({bool showLoading}) onRefresh;
   @override
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const ScreenHeader(title: '도전과제', subtitle: '장소 추가와 방문 기록에 따라 Azure Web API에서 계산된 진행 상태입니다.'),
-          ...challenges.map((c) => Card(child: ListTile(
+          const ScreenHeader(title: '도전과제', subtitle: '로그인한 계정의 장소 추가와 방문 기록 기준으로 계산됩니다.'),
+          if (!isSignedIn)
+            const InfoCard(title: '로그인 필요', body: '도전과제와 기록 장소 카운트는 로그인 후 본인 계정 기준으로 제공됩니다.')
+          else
+            ...challenges.map((c) => Card(child: ListTile(
             leading: Icon(c.isCompleted ? Icons.check_box : Icons.check_box_outline_blank, color: c.isCompleted ? Theme.of(context).colorScheme.primary : null),
             title: Text(c.title, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1007,9 +1038,9 @@ class RecommendationsScreen extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const ScreenHeader(title: '추천 스팟', subtitle: '공유 가능으로 저장된 장소를 추천 장소처럼 보여줍니다.'),
+          const ScreenHeader(title: '추천 스팟', subtitle: '추천 스팟에 공유된 장소만 다른 사용자와 비회원에게 공개됩니다.'),
           if (places.isEmpty)
-            const InfoCard(title: '추천 스팟 없음', body: '장소를 추가하거나 수정할 때 공유 가능을 켜면 이 화면에 표시됩니다.')
+            const InfoCard(title: '추천 스팟 없음', body: '장소를 추가하거나 수정할 때 추천 스팟 공유를 켜면 이 화면에 표시됩니다.')
           else
             ...places.map((p) => PlaceSummaryCard(place: p, onTap: () => openDetails(context, p, onRefresh))),
         ],
@@ -1186,7 +1217,16 @@ class ApiClient {
   }
 
   Future<List<TracePlace>> getPlaces() async {
+    if (!isSignedIn) return [];
+
     final response = await _http.get(uri('/api/places'), headers: headers);
+    if (response.statusCode < 200 || response.statusCode >= 300) throw ApiException.fromResponse(response);
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => TracePlace.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<TracePlace>> getSharedPlaces() async {
+    final response = await _http.get(uri('/api/places/shared'), headers: headers);
     if (response.statusCode < 200 || response.statusCode >= 300) throw ApiException.fromResponse(response);
     final list = jsonDecode(response.body) as List<dynamic>;
     return list.map((e) => TracePlace.fromJson(e as Map<String, dynamic>)).toList();
@@ -1289,6 +1329,8 @@ class ApiClient {
   }
 
   Future<List<ChallengeStatus>> getChallenges() async {
+    if (!isSignedIn) return [];
+
     final response = await _http.get(uri('/api/challenges'), headers: headers);
     if (response.statusCode < 200 || response.statusCode >= 300) throw ApiException.fromResponse(response);
     final list = jsonDecode(response.body) as List<dynamic>;

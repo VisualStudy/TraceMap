@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using TraceMap.Services;
@@ -13,12 +14,14 @@ public class MapController : Controller
         _places = places;
     }
 
+    [Authorize]
     public async Task<IActionResult> Index(int? selectedId)
     {
         ViewBag.SelectedId = selectedId;
         return View(await _places.GetAllAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)));
     }
 
+    [Authorize]
     [HttpGet]
     public IActionResult SelectLocation(double? latitude, double? longitude)
     {

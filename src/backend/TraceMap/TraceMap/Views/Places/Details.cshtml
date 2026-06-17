@@ -64,7 +64,7 @@ else
     <a class="outline-button full" asp-controller="Map" asp-action="Index" asp-route-selectedId="@Model.Id">지도에서 보기</a>
 </section>
 
-<section class="photo-panel" id="place-photo-panel" data-place-id="@Model.Id" data-is-authenticated="@(isAuthenticated ? "true" : "false")">
+<section class="photo-panel" id="place-photo-panel" data-place-id="@Model.Id" data-is-authenticated="@(isAuthenticated ? "true" : "false")" data-can-modify="@(canModify ? "true" : "false")">
     <div class="social-header">
         <div>
             <h2>장소 사진 갤러리</h2>
@@ -72,13 +72,17 @@ else
         </div>
     </div>
 
-    @if (isAuthenticated)
+    @if (canModify)
     {
         <div class="photo-upload-form">
             <input id="photo-files" type="file" accept="image/*" multiple />
             <button id="photo-upload-button" class="primary-button" type="button">사진 업로드</button>
         </div>
         <p class="photo-help">업로드 시 wwwroot/place-photos에 먼저 저장하고, Blob Storage 설정이 정상이라면 place-photos 컨테이너에도 함께 저장합니다.</p>
+    }
+    else if (isAuthenticated)
+    {
+        <div class="login-guide">사진 업로드와 삭제는 이 장소를 등록한 사용자만 사용할 수 있습니다.</div>
     }
     else
     {
@@ -92,7 +96,7 @@ else
     <div id="photo-gallery" class="photo-gallery"></div>
 </section>
 
-<section class="social-panel" id="place-social-panel" data-place-id="@Model.Id" data-is-authenticated="@(isAuthenticated ? "true" : "false")">
+<section class="social-panel" id="place-social-panel" data-place-id="@Model.Id" data-is-authenticated="@(isAuthenticated ? "true" : "false")" data-can-modify="@(canModify ? "true" : "false")">
     <div class="social-header">
         <div>
             <h2>좋아요와 댓글</h2>
@@ -129,6 +133,7 @@ else
 
     const placeId = photoPanel.dataset.placeId;
     const isAuthenticated = photoPanel.dataset.isAuthenticated === 'true';
+    const canModify = photoPanel.dataset.canModify === 'true';
     const photosUrl = `/api/places/${placeId}/photos`;
     const gallery = document.getElementById('photo-gallery');
     const messageBox = document.getElementById('photo-message');
@@ -166,7 +171,7 @@ else
                     <div class="photo-card-body">
                         <strong>${escapeHtml(photo.fileName)}</strong>
                         <span>${escapeHtml(photo.storageProvider)} · ${Math.ceil((photo.size ?? 0) / 1024)}KB</span>
-                        ${isAuthenticated ? `<button class="danger-button small" type="button" data-delete-photo="${photo.id}">삭제</button>` : ''}
+                        ${canModify ? `<button class="danger-button small" type="button" data-delete-photo="${photo.id}">삭제</button>` : ''}
                     </div>
                 </article>
             `).join('');
@@ -175,7 +180,7 @@ else
         }
     }
 
-    if (uploadButton && isAuthenticated) {
+    if (uploadButton && canModify) {
         uploadButton.addEventListener('click', async function () {
             if (!fileInput.files || fileInput.files.length === 0) {
                 showPhotoMessage('업로드할 사진을 선택하세요.', true);

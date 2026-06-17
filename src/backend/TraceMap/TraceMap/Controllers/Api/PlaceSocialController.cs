@@ -21,10 +21,8 @@ public class PlaceSocialController : ControllerBase
     [HttpGet("social")]
     public async Task<IActionResult> GetSocial(int placeId)
     {
-        var exists = await _db.Places.AnyAsync(place => place.Id == placeId);
-        if (!exists) return NotFound();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!await CanViewPlaceAsync(placeId, userId)) return NotFound();
         var comments = await _db.PlaceComments
             .Where(comment => comment.TracePlaceId == placeId)
             .OrderByDescending(comment => comment.CreatedAt)
@@ -47,11 +45,9 @@ public class PlaceSocialController : ControllerBase
     [HttpPost("like")]
     public async Task<IActionResult> ToggleLike(int placeId)
     {
-        var exists = await _db.Places.AnyAsync(place => place.Id == placeId);
-        if (!exists) return NotFound();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
+        if (!await CanViewPlaceAsync(placeId, userId)) return NotFound();
 
         var existing = await _db.PlaceLikes.FirstOrDefaultAsync(like => like.TracePlaceId == placeId && like.UserId == userId);
         if (existing is null)
@@ -80,10 +76,9 @@ public class PlaceSocialController : ControllerBase
         var content = request.Content?.Trim();
         if (string.IsNullOrWhiteSpace(content)) return BadRequest(new { message = "댓글 내용을 입력하세요." });
 
-        var exists = await _db.Places.AnyAsync(place => place.Id == placeId);
-        if (!exists) return NotFound();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!await CanViewPlaceAsync(placeId, userId)) return NotFound();
+
         _db.PlaceComments.Add(new PlaceComment
         {
             TracePlaceId = placeId,
@@ -95,6 +90,13 @@ public class PlaceSocialController : ControllerBase
         });
         await _db.SaveChangesAsync();
         return await GetSocial(placeId);
+    }
+
+    private async Task<bool> CanViewPlaceAsync(int placeId, string? userId)
+    {
+        return await _db.Places.AnyAsync(place =>
+            place.Id == placeId &&
+            (place.IsShared || (!string.IsNullOrWhiteSpace(userId) && place.UserId == userId)));
     }
 }
 

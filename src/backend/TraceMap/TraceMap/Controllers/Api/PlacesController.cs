@@ -17,6 +17,7 @@ public class PlacesController : ControllerBase
         _places = places;
     }
 
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> Get() => Ok(await _places.GetAllAsync(CurrentUserId()));
 
