@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using TraceMap.Services;
 
 namespace TraceMap.Controllers;
@@ -15,7 +16,7 @@ public class MapController : Controller
     public async Task<IActionResult> Index(int? selectedId)
     {
         ViewBag.SelectedId = selectedId;
-        return View(await _places.GetAllAsync());
+        return View(await _places.GetAllAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)));
     }
 
     [HttpGet]

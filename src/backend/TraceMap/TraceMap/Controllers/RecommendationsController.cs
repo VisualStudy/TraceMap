@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using TraceMap.Services;
 
 namespace TraceMap.Controllers;
@@ -14,6 +15,6 @@ public class RecommendationsController : Controller
 
     public async Task<IActionResult> Index()
     {
-        return View(await _places.GetSharedAsync());
+        return View(await _places.GetSharedAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)));
     }
 }
