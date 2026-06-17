@@ -60,6 +60,13 @@ public class TracePlace
     [NotMapped]
     public int PhotoCount { get; set; }
 
+    /// <summary>
+    /// 현재 요청 사용자가 이 장소의 작성자인지 여부입니다.
+    /// DB에는 저장하지 않고 API와 Razor 화면에서 수정/삭제 버튼 표시 여부를 판단할 때만 사용합니다.
+    /// </summary>
+    [NotMapped]
+    public bool CanModify { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -34,7 +34,8 @@ public class SeedDataService : ISeedDataService
 
         if (await _db.Places.AnyAsync()) return;
 
-        _db.Places.AddRange(
+        var seedPlaces = new List<TracePlace>
+        {
             new TracePlace
             {
                 Name = "순천만 국가정원",
@@ -87,7 +88,16 @@ public class SeedDataService : ISeedDataService
                 IsShared = true,
                 SharedDescription = "이름 없는 장소도 직접 기록할 수 있다는 TraceMap의 목적을 보여주는 추천 스팟입니다."
             }
-        );
+        };
+
+        foreach (var place in seedPlaces)
+        {
+            place.UserId = user.Id;
+            place.UserName = user.UserName ?? email;
+            place.IsAnonymous = false;
+        }
+
+        _db.Places.AddRange(seedPlaces);
         await _db.SaveChangesAsync();
     }
 }

@@ -364,6 +364,10 @@ class PlacesScreen extends StatelessWidget {
             const Expanded(child: ScreenHeader(title: '내 장소 목록', subtitle: '원격 Web API에서 불러온 장소 목록입니다.')),
             FilledButton.icon(
               onPressed: () async {
+                if (!api.isSignedIn) {
+                  showMessage(context, '새 장소 추가는 로그인 후 사용할 수 있습니다.');
+                  return;
+                }
                 await Navigator.push(context, MaterialPageRoute(builder: (_) => PlaceFormScreen(api: api, onSaved: onRefresh)));
               },
               icon: const Icon(Icons.add),
@@ -387,7 +391,7 @@ class PlaceSummaryCard extends StatelessWidget {
         child: ListTile(
           leading: CircleAvatar(child: Icon(categoryIcon(place.category))),
           title: Text(place.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('${place.category}\n방문 여부: ${place.isVisited ? '완료' : '예정'} · 방문 ${place.visitCount}회\n좋아요 ${place.likeCount}개 · 댓글 ${place.commentCount}개 · 사진 ${place.photoCount}장'),
+          subtitle: Text('${place.category}${place.canModify ? ' · 내가 등록' : ''}\n방문 여부: ${place.isVisited ? '완료' : '예정'} · 방문 ${place.visitCount}회\n좋아요 ${place.likeCount}개 · 댓글 ${place.commentCount}개 · 사진 ${place.photoCount}장'),
           isThreeLine: true,
           trailing: const Icon(Icons.chevron_right),
           onTap: onTap,
@@ -525,7 +529,13 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    final canModify = place.canModify;
+    final ownershipMessage = widget.api.isSignedIn
+        ? '이 장소는 등록한 사용자만 방문 기록, 수정, 삭제를 할 수 있습니다.'
+        : '방문 기록, 수정, 삭제는 장소를 등록한 사용자로 로그인한 뒤 사용할 수 있습니다.';
+
+    return Scaffold(
         appBar: AppBar(title: const Text('장소 상세 정보')),
         body: ListView(
           padding: const EdgeInsets.all(16),
@@ -550,32 +560,35 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
             ),
             const SizedBox(height: 8),
             if (busy) const LinearProgressIndicator(),
-            if (!place.isVisited)
-              FilledButton(onPressed: busy ? null : () => _action(() => widget.api.markVisited(place.id), '방문 완료로 변경했습니다.'), child: const Text('방문 완료로 변경'))
-            else ...[
-              FilledButton(onPressed: busy ? null : () => _action(() => widget.api.addVisit(place.id), '방문 횟수를 추가했습니다.'), child: const Text('방문 횟수 +1')),
-              OutlinedButton(onPressed: busy ? null : () => _action(() => widget.api.removeVisit(place.id), '방문 횟수를 차감했습니다.'), child: const Text('방문 횟수 -1')),
-            ],
-            Row(children: [
-              Expanded(child: OutlinedButton.icon(
-                onPressed: busy ? null : () async {
-                  await Navigator.push(context, MaterialPageRoute(builder: (_) => PlaceFormScreen(api: widget.api, existing: place, onSaved: widget.onRefresh)));
-                  await _reload();
-                },
-                icon: const Icon(Icons.edit), label: const Text('수정하기'),
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: busy ? null : () async {
-                  final ok = await confirm(context, '정말 삭제하시겠습니까? 목록과 지도에서 함께 제거됩니다.');
-                  if (ok != true) return;
-                  await _action(() => widget.api.deletePlace(place.id), '장소를 삭제했습니다.');
-                  if (mounted) Navigator.pop(context);
-                },
-                icon: const Icon(Icons.delete), label: const Text('삭제하기'),
-              )),
-            ]),
+            if (canModify) ...[
+              if (!place.isVisited)
+                FilledButton(onPressed: busy ? null : () => _action(() => widget.api.markVisited(place.id), '방문 완료로 변경했습니다.'), child: const Text('방문 완료로 변경'))
+              else ...[
+                FilledButton(onPressed: busy ? null : () => _action(() => widget.api.addVisit(place.id), '방문 횟수를 추가했습니다.'), child: const Text('방문 횟수 +1')),
+                OutlinedButton(onPressed: busy ? null : () => _action(() => widget.api.removeVisit(place.id), '방문 횟수를 차감했습니다.'), child: const Text('방문 횟수 -1')),
+              ],
+              Row(children: [
+                Expanded(child: OutlinedButton.icon(
+                  onPressed: busy ? null : () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => PlaceFormScreen(api: widget.api, existing: place, onSaved: widget.onRefresh)));
+                    await _reload();
+                  },
+                  icon: const Icon(Icons.edit), label: const Text('수정하기'),
+                )),
+                const SizedBox(width: 8),
+                Expanded(child: FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: busy ? null : () async {
+                    final ok = await confirm(context, '정말 삭제하시겠습니까? 목록과 지도에서 함께 제거됩니다.');
+                    if (ok != true) return;
+                    await _action(() => widget.api.deletePlace(place.id), '장소를 삭제했습니다.');
+                    if (mounted) Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.delete), label: const Text('삭제하기'),
+                )),
+              ]),
+            ] else
+              InfoCard(title: '작성자 전용 기능', body: ownershipMessage),
             const SizedBox(height: 16),
             PhotoSection(
               api: widget.api,
@@ -597,6 +610,7 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
           ],
         ),
       );
+  }
 }
 
 
@@ -835,6 +849,10 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
   }
 
   Future<void> save() async {
+    if (!widget.api.isSignedIn) {
+      showMessage(context, '장소 저장은 로그인 후 사용할 수 있습니다.');
+      return;
+    }
     if (!formKey.currentState!.validate()) return;
     setState(() => busy = true);
     final p = TracePlace(
@@ -1437,6 +1455,10 @@ class TracePlace {
     required this.isShared,
     required this.sharedDescription,
     this.photoUrl,
+    this.userId,
+    this.userName,
+    this.isAnonymous = true,
+    this.canModify = false,
     this.likeCount = 0,
     this.commentCount = 0,
     this.photoCount = 0,
@@ -1454,6 +1476,10 @@ class TracePlace {
   final bool isShared;
   final String sharedDescription;
   final String? photoUrl;
+  final String? userId;
+  final String? userName;
+  final bool isAnonymous;
+  final bool canModify;
   final int likeCount;
   final int commentCount;
   final int photoCount;
@@ -1471,6 +1497,10 @@ class TracePlace {
     isShared: asBool(json, 'isShared'),
     sharedDescription: asString(json, 'sharedDescription'),
     photoUrl: asNullableString(json, 'photoUrl'),
+    userId: asNullableString(json, 'userId'),
+    userName: asNullableString(json, 'userName'),
+    isAnonymous: asBool(json, 'isAnonymous'),
+    canModify: asBool(json, 'canModify'),
     likeCount: asInt(json, 'likeCount'),
     commentCount: asInt(json, 'commentCount'),
     photoCount: asInt(json, 'photoCount'),
