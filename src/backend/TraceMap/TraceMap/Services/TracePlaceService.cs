@@ -13,7 +13,7 @@ public class TracePlaceService : ITracePlaceService
         _db = db;
     }
 
-    public async Task<List<TracePlace>> GetAllAsync()
+    public async Task<List<TracePlace>> GetAllAsync(string? viewerUserId = null)
     {
         if (string.IsNullOrWhiteSpace(viewerUserId))
         {
@@ -26,17 +26,19 @@ public class TracePlaceService : ITracePlaceService
             .ToListAsync();
 
         await ApplySocialCountsAsync(places);
+        ApplyViewerPermissions(places, viewerUserId);
         return places;
     }
 
-    public async Task<List<TracePlace>> GetSharedAsync()
+    public async Task<List<TracePlace>> GetSharedAsync(string? viewerUserId = null)
     {
         var places = await _db.Places.Where(p => p.IsShared).OrderByDescending(p => p.CreatedAt).ToListAsync();
         await ApplySocialCountsAsync(places);
+        ApplyViewerPermissions(places, viewerUserId);
         return places;
     }
 
-    public async Task<TracePlace?> GetByIdAsync(int id)
+    public async Task<TracePlace?> GetByIdAsync(int id, string? viewerUserId = null)
     {
         var place = await _db.Places.FirstOrDefaultAsync(p =>
             p.Id == id &&
@@ -45,6 +47,7 @@ public class TracePlaceService : ITracePlaceService
         if (place is not null)
         {
             await ApplySocialCountsAsync(new List<TracePlace> { place });
+            ApplyViewerPermissions(new List<TracePlace> { place }, viewerUserId);
         }
 
         return place;
@@ -85,10 +88,11 @@ public class TracePlaceService : ITracePlaceService
         return place;
     }
 
-    public async Task<bool> UpdateAsync(TracePlace place)
+    public async Task<PlaceWriteResult> UpdateAsync(TracePlace place, string userId)
     {
         var existing = await _db.Places.FirstOrDefaultAsync(p => p.Id == place.Id);
-        if (existing is null) return false;
+        if (existing is null) return PlaceWriteResult.NotFound;
+        if (!IsOwner(existing, userId)) return PlaceWriteResult.Forbidden;
 
         existing.Name = place.Name;
         existing.Category = place.Category;
@@ -101,55 +105,61 @@ public class TracePlaceService : ITracePlaceService
         existing.IsShared = place.IsShared;
         existing.SharedDescription = place.SharedDescription;
         existing.PhotoUrl = place.PhotoUrl;
-        existing.UserId = place.UserId;
-        existing.UserName = place.UserName;
-        existing.IsAnonymous = place.IsAnonymous;
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return true;
+        return PlaceWriteResult.Success;
     }
 
-    public async Task<bool> DeleteAsync(int id)
+    public async Task<PlaceWriteResult> DeleteAsync(int id, string userId)
     {
         var existing = await _db.Places.FirstOrDefaultAsync(p => p.Id == id);
-        if (existing is null) return false;
+        if (existing is null) return PlaceWriteResult.NotFound;
+        if (!IsOwner(existing, userId)) return PlaceWriteResult.Forbidden;
+
         _db.Places.Remove(existing);
         await _db.SaveChangesAsync();
-        return true;
+        return PlaceWriteResult.Success;
     }
 
-    public async Task<bool> MarkVisitedAsync(int id)
+    public async Task<PlaceWriteResult> MarkVisitedAsync(int id, string userId)
     {
-        var existing = await GetByIdAsync(id);
-        if (existing is null) return false;
+        var existing = await _db.Places.FirstOrDefaultAsync(p => p.Id == id);
+        if (existing is null) return PlaceWriteResult.NotFound;
+        if (!IsOwner(existing, userId)) return PlaceWriteResult.Forbidden;
+
         existing.IsVisited = true;
         existing.VisitCount = Math.Max(existing.VisitCount, 1);
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return true;
+        return PlaceWriteResult.Success;
     }
 
-    public async Task<bool> AddVisitAsync(int id)
+    public async Task<PlaceWriteResult> AddVisitAsync(int id, string userId)
     {
-        var existing = await GetByIdAsync(id);
-        if (existing is null) return false;
+        var existing = await _db.Places.FirstOrDefaultAsync(p => p.Id == id);
+        if (existing is null) return PlaceWriteResult.NotFound;
+        if (!IsOwner(existing, userId)) return PlaceWriteResult.Forbidden;
+
         existing.IsVisited = true;
         existing.VisitCount += 1;
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return true;
+        return PlaceWriteResult.Success;
     }
 
-    public async Task<bool> RemoveVisitAsync(int id)
+    public async Task<PlaceWriteResult> RemoveVisitAsync(int id, string userId)
     {
-        var existing = await GetByIdAsync(id);
-        if (existing is null) return false;
+        var existing = await _db.Places.FirstOrDefaultAsync(p => p.Id == id);
+        if (existing is null) return PlaceWriteResult.NotFound;
+        if (!IsOwner(existing, userId)) return PlaceWriteResult.Forbidden;
+
         existing.VisitCount = Math.Max(0, existing.VisitCount - 1);
         existing.IsVisited = existing.VisitCount > 0;
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return true;
+        return PlaceWriteResult.Success;
     }
+
     private async Task ApplySocialCountsAsync(IReadOnlyList<TracePlace> places)
     {
         if (places.Count == 0) return;
@@ -182,4 +192,18 @@ public class TracePlaceService : ITracePlaceService
         }
     }
 
+    private static void ApplyViewerPermissions(IReadOnlyList<TracePlace> places, string? viewerUserId)
+    {
+        foreach (var place in places)
+        {
+            place.CanModify = IsOwner(place, viewerUserId);
+        }
+    }
+
+    private static bool IsOwner(TracePlace place, string? userId)
+    {
+        return !string.IsNullOrWhiteSpace(userId)
+            && !string.IsNullOrWhiteSpace(place.UserId)
+            && string.Equals(place.UserId, userId, StringComparison.Ordinal);
+    }
 }

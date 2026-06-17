@@ -2,6 +2,13 @@
 
 namespace TraceMap.Services;
 
+public enum PlaceWriteResult
+{
+    Success,
+    NotFound,
+    Forbidden
+}
+
 public interface ITracePlaceService
 {
     /// <summary>
@@ -23,9 +30,9 @@ public interface ITracePlaceService
     Task<bool> CanViewAsync(int id, string? viewerUserId = null);
     Task<bool> CanModifyAsync(int id, string? viewerUserId = null);
     Task<TracePlace> AddAsync(TracePlace place);
-    Task<bool> UpdateAsync(TracePlace place);
-    Task<bool> DeleteAsync(int id);
-    Task<bool> MarkVisitedAsync(int id);
-    Task<bool> AddVisitAsync(int id);
-    Task<bool> RemoveVisitAsync(int id);
+    Task<PlaceWriteResult> UpdateAsync(TracePlace place, string userId);
+    Task<PlaceWriteResult> DeleteAsync(int id, string userId);
+    Task<PlaceWriteResult> MarkVisitedAsync(int id, string userId);
+    Task<PlaceWriteResult> AddVisitAsync(int id, string userId);
+    Task<PlaceWriteResult> RemoveVisitAsync(int id, string userId);
 }

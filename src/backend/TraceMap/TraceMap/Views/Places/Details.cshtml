@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "장소 상세 정보";
     var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    var canModify = Model.CanModify;
 }
 <header class="page-header with-back">
     <a asp-action="Index">‹</a>
@@ -26,27 +27,40 @@
 </section>
 
 <section class="actions">
-@if (!Model.IsVisited)
+@if (canModify)
 {
-    <form asp-action="MarkVisited" asp-route-id="@Model.Id" method="post">
-        <button class="primary-button full" type="submit">방문 완료로 변경</button>
-    </form>
-}
-else
-{
-    <form asp-action="AddVisit" asp-route-id="@Model.Id" method="post">
-        <button class="primary-button full" type="submit">방문 횟수 +1</button>
-    </form>
-    <form asp-action="RemoveVisit" asp-route-id="@Model.Id" method="post">
-        <button class="outline-button full" type="submit">방문 횟수 -1</button>
-    </form>
-}
+    if (!Model.IsVisited)
+    {
+        <form asp-action="MarkVisited" asp-route-id="@Model.Id" method="post">
+            <button class="primary-button full" type="submit">방문 완료로 변경</button>
+        </form>
+    }
+    else
+    {
+        <form asp-action="AddVisit" asp-route-id="@Model.Id" method="post">
+            <button class="primary-button full" type="submit">방문 횟수 +1</button>
+        </form>
+        <form asp-action="RemoveVisit" asp-route-id="@Model.Id" method="post">
+            <button class="outline-button full" type="submit">방문 횟수 -1</button>
+        </form>
+    }
     <div class="two-buttons">
         <a class="outline-button" asp-action="Edit" asp-route-id="@Model.Id">✎ 수정하기</a>
         <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('정말 삭제하시겠습니까? 목록과 지도에서 함께 제거됩니다.');">
             <button class="danger-button" type="submit">🗑 삭제하기</button>
         </form>
     </div>
+}
+else
+{
+    <div class="login-guide">
+        이 장소는 등록한 사용자만 방문 기록, 수정, 삭제를 할 수 있습니다.
+        @if (!isAuthenticated)
+        {
+            <a asp-controller="Account" asp-action="Login" asp-route-returnUrl="@Context.Request.Path">로그인하기</a>
+        }
+    </div>
+}
     <a class="outline-button full" asp-controller="Map" asp-action="Index" asp-route-selectedId="@Model.Id">지도에서 보기</a>
 </section>
 
