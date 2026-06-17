@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,6 +14,58 @@ void main() {
 }
 
 const String apiBaseUrl = 'https://tracemap.azurewebsites.net';
+
+const LatLng kDefaultMapCenter = LatLng(34.9501, 127.4872);
+const double kDefaultLatitude = 34.9501;
+const double kDefaultLongitude = 127.4872;
+const Duration kLocationTimeout = Duration(seconds: 8);
+
+class CurrentLocationResult {
+  const CurrentLocationResult({this.latLng, required this.message});
+
+  final LatLng? latLng;
+  final String message;
+
+  bool get hasLocation => latLng != null;
+}
+
+Future<CurrentLocationResult> getCurrentLocationLatLng() async {
+  try {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return const CurrentLocationResult(message: '기기의 위치 서비스가 꺼져 있어 기본 위치로 지도를 표시합니다.');
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    final hasPermission = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
+    if (!hasPermission) {
+      return const CurrentLocationResult(message: '위치 권한이 허용되지 않아 기본 위치로 지도를 표시합니다.');
+    }
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: kLocationTimeout,
+      ),
+    );
+
+    return CurrentLocationResult(
+      latLng: LatLng(position.latitude, position.longitude),
+      message: '현재 위치를 기준으로 지도를 표시했습니다.',
+    );
+  } catch (e) {
+    return CurrentLocationResult(message: '현재 위치를 가져오지 못해 기본 위치로 지도를 표시합니다: $e');
+  }
+}
+
+bool isDefaultTraceMapLocation(double latitude, double longitude) {
+  return (latitude - kDefaultLatitude).abs() < 0.000001 &&
+      (longitude - kDefaultLongitude).abs() < 0.000001;
+}
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -311,7 +364,62 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  final MapController mapController = MapController();
   TracePlace? selected;
+  LatLng? currentLocation;
+  bool isLocating = false;
+  String locationMessage = '현재 위치를 확인하는 중입니다.';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isSignedIn) {
+      _moveToCurrentLocation();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isSignedIn && widget.isSignedIn && currentLocation == null && !isLocating) {
+      _moveToCurrentLocation();
+    }
+  }
+
+  LatLng _fallbackCenter(List<TracePlace> places) {
+    if (places.isNotEmpty) {
+      return LatLng(places.first.latitude, places.first.longitude);
+    }
+    return kDefaultMapCenter;
+  }
+
+  Future<void> _moveToCurrentLocation() async {
+    if (!mounted) return;
+    setState(() {
+      isLocating = true;
+      locationMessage = '현재 위치를 확인하는 중입니다.';
+    });
+
+    final result = await getCurrentLocationLatLng();
+    if (!mounted) return;
+
+    setState(() {
+      currentLocation = result.latLng;
+      locationMessage = result.message;
+      isLocating = false;
+    });
+
+    if (result.latLng != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          mapController.move(result.latLng!, 14);
+        } catch (_) {
+          // 지도가 아직 완전히 준비되지 않은 경우에는 다음 빌드의 initialCenter가 대신 적용됩니다.
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -326,37 +434,70 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     final places = widget.places.where((p) => p.latitude != 0 && p.longitude != 0).toList();
-    final center = places.isNotEmpty ? LatLng(places.first.latitude, places.first.longitude) : const LatLng(34.9501, 127.4872);
+    final center = currentLocation ?? _fallbackCenter(places);
+    final markers = <Marker>[
+      ...places.map((p) => Marker(
+            point: LatLng(p.latitude, p.longitude),
+            width: 44,
+            height: 44,
+            child: GestureDetector(
+              onTap: () => setState(() => selected = p),
+              child: CircleAvatar(
+                backgroundColor: p.id == selected?.id ? Colors.orange : Theme.of(context).colorScheme.primary,
+                child: Icon(categoryIcon(p.category), color: Colors.white, size: 22),
+              ),
+            ),
+          )),
+      if (currentLocation != null)
+        Marker(
+          point: currentLocation!,
+          width: 54,
+          height: 54,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: const [BoxShadow(blurRadius: 8, color: Colors.black26)],
+              border: Border.all(color: Theme.of(context).colorScheme.primary, width: 3),
+            ),
+            child: Icon(Icons.my_location, color: Theme.of(context).colorScheme.primary, size: 26),
+          ),
+        ),
+    ];
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const ScreenHeader(title: '지도 화면', subtitle: 'OpenStreetMap 지도에서 내가 등록한 장소의 마커만 확인합니다.'),
+        const ScreenHeader(title: '지도 화면', subtitle: '현재 위치 권한이 허용되면 사용자의 위치를 중심으로 지도를 먼저 표시합니다.'),
         ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: SizedBox(
             height: 430,
             child: FlutterMap(
-              options: MapOptions(initialCenter: center, initialZoom: 13),
+              mapController: mapController,
+              options: MapOptions(initialCenter: center, initialZoom: currentLocation == null ? 13 : 14),
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.trace_map',
+                  userAgentPackageName: 'com.parkuro.trace_map',
                 ),
-                MarkerLayer(
-                  markers: places.map((p) => Marker(
-                    point: LatLng(p.latitude, p.longitude),
-                    width: 44,
-                    height: 44,
-                    child: GestureDetector(
-                      onTap: () => setState(() => selected = p),
-                      child: CircleAvatar(
-                        backgroundColor: p.id == selected?.id ? Colors.orange : Theme.of(context).colorScheme.primary,
-                        child: Icon(categoryIcon(p.category), color: Colors.white, size: 22),
-                      ),
-                    ),
-                  )).toList(),
-                ),
+                MarkerLayer(markers: markers),
               ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            leading: isLocating
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(currentLocation == null ? Icons.location_disabled : Icons.my_location),
+            title: const Text('현재 위치 기준 지도'),
+            subtitle: Text(locationMessage),
+            trailing: IconButton(
+              tooltip: '현재 위치로 이동',
+              icon: const Icon(Icons.near_me),
+              onPressed: isLocating ? null : _moveToCurrentLocation,
             ),
           ),
         ),
@@ -844,9 +985,11 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
   bool isVisited = false;
   bool isShared = false;
   int visitCount = 0;
-  double latitude = 34.9501;
-  double longitude = 127.4872;
+  double latitude = kDefaultLatitude;
+  double longitude = kDefaultLongitude;
   bool busy = false;
+  bool isLocating = false;
+  String locationMessage = '위치 정보가 선택되지 않으면 기본 위치가 사용됩니다.';
 
   final categories = const ['산책', '운동 / 산책', '사진', '그래피티 / 사진', '맛집', '휴식', '문화'];
 
@@ -862,8 +1005,11 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
     isVisited = p?.isVisited ?? false;
     isShared = p?.isShared ?? false;
     visitCount = p?.visitCount ?? 0;
-    latitude = p?.latitude == 0 || p?.latitude == null ? 34.9501 : p!.latitude;
-    longitude = p?.longitude == 0 || p?.longitude == null ? 127.4872 : p!.longitude;
+    latitude = p?.latitude == 0 || p?.latitude == null ? kDefaultLatitude : p!.latitude;
+    longitude = p?.longitude == 0 || p?.longitude == null ? kDefaultLongitude : p!.longitude;
+    if (p == null) {
+      _setCurrentLocation(silent: true);
+    }
   }
 
   @override
@@ -873,6 +1019,26 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
     activities.dispose();
     sharedDescription.dispose();
     super.dispose();
+  }
+
+  Future<void> _setCurrentLocation({bool silent = false}) async {
+    if (!mounted || isLocating) return;
+    setState(() {
+      isLocating = true;
+      if (!silent) locationMessage = '현재 위치를 확인하는 중입니다.';
+    });
+
+    final result = await getCurrentLocationLatLng();
+    if (!mounted) return;
+
+    setState(() {
+      if (result.latLng != null) {
+        latitude = result.latLng!.latitude;
+        longitude = result.latLng!.longitude;
+      }
+      locationMessage = result.message;
+      isLocating = false;
+    });
   }
 
   Future<void> save() async {
@@ -946,16 +1112,43 @@ class _PlaceFormScreenState extends State<PlaceFormScreen> {
               SwitchListTile(title: const Text('추천 스팟에 공유 가능'), value: isShared, onChanged: (v) => setState(() => isShared = v)),
               TextFormField(controller: sharedDescription, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '공유용 설명')),
               const SizedBox(height: 14),
-              Card(child: ListTile(
-                leading: const Icon(Icons.my_location),
-                title: const Text('위치 정보'),
-                subtitle: Text('위도 $latitude / 경도 $longitude'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  final picked = await Navigator.push<LatLng>(context, MaterialPageRoute(builder: (_) => LocationPickerScreen(initial: LatLng(latitude, longitude))));
-                  if (picked != null) setState(() { latitude = picked.latitude; longitude = picked.longitude; });
-                },
-              )),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(children: [
+                    ListTile(
+                      leading: const Icon(Icons.my_location),
+                      title: const Text('위치 정보'),
+                      subtitle: Text('위도 ${latitude.toStringAsFixed(6)} / 경도 ${longitude.toStringAsFixed(6)}\n$locationMessage'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        final picked = await Navigator.push<LatLng>(context, MaterialPageRoute(builder: (_) => LocationPickerScreen(initial: LatLng(latitude, longitude))));
+                        if (picked != null) {
+                          setState(() {
+                            latitude = picked.latitude;
+                            longitude = picked.longitude;
+                            locationMessage = '지도에서 선택한 위치를 사용합니다.';
+                          });
+                        }
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Row(children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: isLocating ? null : () => _setCurrentLocation(),
+                            icon: isLocating
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.near_me),
+                            label: const Text('현재 위치로 설정'),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ]),
+                ),
+              ),
               const SizedBox(height: 12),
               if (busy) const LinearProgressIndicator(),
               FilledButton.icon(onPressed: busy ? null : save, icon: const Icon(Icons.save), label: const Text('저장하기')),
@@ -973,11 +1166,48 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
+  final MapController mapController = MapController();
   late LatLng selected;
+  bool isLocating = false;
+  String locationMessage = '지도를 눌러 장소 위치를 직접 선택할 수 있습니다.';
+
   @override
   void initState() {
     super.initState();
     selected = widget.initial;
+    if (isDefaultTraceMapLocation(selected.latitude, selected.longitude)) {
+      _moveToCurrentLocation(silent: true);
+    }
+  }
+
+  Future<void> _moveToCurrentLocation({bool silent = false}) async {
+    if (!mounted || isLocating) return;
+    setState(() {
+      isLocating = true;
+      if (!silent) locationMessage = '현재 위치를 확인하는 중입니다.';
+    });
+
+    final result = await getCurrentLocationLatLng();
+    if (!mounted) return;
+
+    setState(() {
+      if (result.latLng != null) {
+        selected = result.latLng!;
+      }
+      locationMessage = result.message;
+      isLocating = false;
+    });
+
+    if (result.latLng != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          mapController.move(result.latLng!, 14);
+        } catch (_) {
+          // 지도가 아직 준비되지 않은 경우 initialCenter가 대신 적용됩니다.
+        }
+      });
+    }
   }
 
   @override
@@ -985,9 +1215,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         appBar: AppBar(title: const Text('지도에서 위치 선택')),
         body: Column(children: [
           Expanded(child: FlutterMap(
-            options: MapOptions(initialCenter: selected, initialZoom: 14, onTap: (_, point) => setState(() => selected = point)),
+            mapController: mapController,
+            options: MapOptions(initialCenter: selected, initialZoom: 14, onTap: (_, point) => setState(() {
+              selected = point;
+              locationMessage = '지도에서 선택한 위치를 사용합니다.';
+            })),
             children: [
-              TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.trace_map'),
+              TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.parkuro.trace_map'),
               MarkerLayer(markers: [Marker(point: selected, width: 48, height: 48, child: const Icon(Icons.location_on, size: 48, color: Colors.red))]),
             ],
           )),
@@ -995,8 +1229,22 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(children: [
               Text('선택 위치: ${selected.latitude.toStringAsFixed(6)}, ${selected.longitude.toStringAsFixed(6)}'),
+              const SizedBox(height: 4),
+              Text(locationMessage, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54)),
               const SizedBox(height: 8),
-              FilledButton(onPressed: () => Navigator.pop(context, selected), child: const Text('이 위치로 설정')),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: isLocating ? null : () => _moveToCurrentLocation(),
+                    icon: isLocating
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.near_me),
+                    label: const Text('현재 위치로 이동'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: FilledButton(onPressed: () => Navigator.pop(context, selected), child: const Text('이 위치로 설정'))),
+              ]),
             ]),
           ),
         ]),

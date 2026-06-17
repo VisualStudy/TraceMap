@@ -54,6 +54,8 @@ public class PlacesController : Controller
     [Authorize]
     public IActionResult Create(double? latitude, double? longitude)
     {
+        ViewBag.UseCurrentLocation = !latitude.HasValue && !longitude.HasValue;
+
         return View(new TracePlace
         {
             Latitude = latitude ?? 34.9501,

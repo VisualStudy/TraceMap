@@ -25,6 +25,7 @@ public class MapController : Controller
     [HttpGet]
     public IActionResult SelectLocation(double? latitude, double? longitude)
     {
+        ViewBag.HasExplicitLocation = latitude.HasValue && longitude.HasValue;
         ViewBag.Latitude = latitude ?? 34.9501;
         ViewBag.Longitude = longitude ?? 127.4872;
         return View();

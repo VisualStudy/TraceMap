@@ -1,7 +1,19 @@
 @model TracePlace
+@{
+    var isDefaultLocation = System.Math.Abs(Model.Latitude - 34.9501) < 0.000001 && System.Math.Abs(Model.Longitude - 127.4872) < 0.000001;
+    var shouldOpenPickerAtCurrentLocation = Model.Id == 0 && isDefaultLocation;
+    var useCurrentLocation = ViewData["UseCurrentLocation"] is bool useCurrentLocationValue && useCurrentLocationValue;
+}
 <div asp-validation-summary="ModelOnly" class="validation"></div>
 
-<a class="outline-button full" asp-controller="Map" asp-action="SelectLocation" asp-route-latitude="@Model.Latitude" asp-route-longitude="@Model.Longitude">지도에서 위치 선택</a>
+@if (shouldOpenPickerAtCurrentLocation)
+{
+    <a class="outline-button full" asp-controller="Map" asp-action="SelectLocation">지도에서 위치 선택</a>
+}
+else
+{
+    <a class="outline-button full" asp-controller="Map" asp-action="SelectLocation" asp-route-latitude="@Model.Latitude" asp-route-longitude="@Model.Longitude">지도에서 위치 선택</a>
+}
 <div class="coordinate-grid">
     <div>
         <label asp-for="Latitude"></label>
@@ -53,3 +65,26 @@
 
 @* 더 이상 화면에 표시하지 않는 확장용 값은 수정 시 보존만 합니다. *@
 <input asp-for="PhotoUrl" type="hidden" />
+
+
+@if (useCurrentLocation && shouldOpenPickerAtCurrentLocation)
+{
+    <script>
+        (function () {
+            const latInput = document.getElementById('Latitude');
+            const lngInput = document.getElementById('Longitude');
+            if (!latInput || !lngInput || !navigator.geolocation) return;
+
+            navigator.geolocation.getCurrentPosition(function (position) {
+                latInput.value = position.coords.latitude.toFixed(6);
+                lngInput.value = position.coords.longitude.toFixed(6);
+            }, function () {
+                // 권한 거부 또는 위치 확인 실패 시 기존 기본 좌표를 유지합니다.
+            }, {
+                enableHighAccuracy: true,
+                timeout: 8000,
+                maximumAge: 60000
+            });
+        })();
+    </script>
+}

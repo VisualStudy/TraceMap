@@ -41,11 +41,12 @@
     <script>
         (function () {
             const places = @Html.Raw(placesJson);
-            const selectedId = @(selected?.Id.ToString() ?? "null");
+            const selectedId = @(selectedId?.ToString() ?? "null");
             const defaultCenter = [34.9501, 127.4872];
             const center = places.length > 0
                 ? [places[0].latitude || defaultCenter[0], places[0].longitude || defaultCenter[1]]
                 : defaultCenter;
+            const hasSelectedPlace = selectedId !== null;
 
             const map = L.map('traceMap', {
                 zoomControl: true,
@@ -59,6 +60,7 @@
 
             const bounds = [];
             const markers = new Map();
+            let userLocationMarker = null;
 
             function getCategoryIcon(place) {
                 const category = (place.category || '').toLowerCase();
@@ -127,16 +129,62 @@
                 bounds.push([place.latitude, place.longitude]);
             });
 
-            if (bounds.length > 1) {
-                map.fitBounds(bounds, { padding: [28, 28] });
+            function applyPlaceFallbackView() {
+                if (bounds.length > 1) {
+                    map.fitBounds(bounds, { padding: [28, 28] });
+                } else if (bounds.length === 1) {
+                    map.setView(bounds[0], 13);
+                }
+
+                if (selectedId !== null && markers.has(selectedId)) {
+                    const selectedMarker = markers.get(selectedId);
+                    selectedMarker.openPopup();
+                    const selectedPlace = places.find(p => p.id === selectedId);
+                    if (selectedPlace) setSelected(selectedPlace);
+                }
             }
 
-            if (selectedId !== null && markers.has(selectedId)) {
-                const selectedMarker = markers.get(selectedId);
-                selectedMarker.openPopup();
-                const selectedPlace = places.find(p => p.id === selectedId);
-                if (selectedPlace) setSelected(selectedPlace);
+            function setUserLocation(lat, lng) {
+                const latlng = [lat, lng];
+
+                if (userLocationMarker) {
+                    userLocationMarker.setLatLng(latlng);
+                } else {
+                    userLocationMarker = L.circleMarker(latlng, {
+                        radius: 9,
+                        color: '#2563eb',
+                        fillColor: '#2563eb',
+                        fillOpacity: 0.25,
+                        weight: 3
+                    }).addTo(map).bindPopup('현재 위치');
+                }
+
+                map.setView(latlng, 14);
             }
+
+            function centerOnCurrentLocation() {
+                if (hasSelectedPlace) {
+                    applyPlaceFallbackView();
+                    return;
+                }
+
+                if (!navigator.geolocation) {
+                    applyPlaceFallbackView();
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(function (position) {
+                    setUserLocation(position.coords.latitude, position.coords.longitude);
+                }, function () {
+                    applyPlaceFallbackView();
+                }, {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 60000
+                });
+            }
+
+            centerOnCurrentLocation();
 
             setTimeout(function () {
                 map.invalidateSize();

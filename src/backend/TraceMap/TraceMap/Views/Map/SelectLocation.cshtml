@@ -2,6 +2,7 @@
     ViewData["Title"] = "지도에서 위치 선택";
     double lat = ViewBag.Latitude;
     double lng = ViewBag.Longitude;
+    var hasExplicitLocation = ViewData["HasExplicitLocation"] is bool hasExplicitLocationValue && hasExplicitLocationValue;
 }
 <header class="page-header with-back">
     <a asp-controller="Places" asp-action="Create">‹</a>
@@ -28,6 +29,7 @@
         (function () {
             const startLat = Number('@lat'.replace(',', '.')) || 34.9501;
             const startLng = Number('@lng'.replace(',', '.')) || 127.4872;
+            const hasExplicitLocation = @(hasExplicitLocation ? "true" : "false");
             const latInput = document.getElementById('selectedLatitude');
             const lngInput = document.getElementById('selectedLongitude');
 
@@ -81,6 +83,20 @@
                     map.setView(latlng, map.getZoom());
                 }
             });
+
+            if (!hasExplicitLocation && navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function (position) {
+                    const latlng = L.latLng(position.coords.latitude, position.coords.longitude);
+                    updateLocation(latlng);
+                    map.setView(latlng, 14);
+                }, function () {
+                    // 권한 거부 또는 위치 확인 실패 시 기본 좌표를 유지합니다.
+                }, {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 60000
+                });
+            }
 
             setTimeout(function () {
                 map.invalidateSize();
