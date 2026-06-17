@@ -4,5 +4,5 @@ namespace TraceMap.Services;
 
 public interface IChallengeService
 {
-    Task<List<ChallengeStatus>> GetStatusesAsync();
+    Task<List<ChallengeStatus>> GetStatusesAsync(string? userId);
 }

@@ -26,8 +26,7 @@ public class PlacePhotosController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetPhotos(int placeId)
     {
-        var exists = await _db.Places.AnyAsync(place => place.Id == placeId);
-        if (!exists) return NotFound();
+        if (!await CanViewPlaceAsync(placeId, CurrentUserId())) return NotFound();
 
         var photos = await _db.PlacePhotos
             .Where(photo => photo.TracePlaceId == placeId && !photo.IsDeleted)
@@ -45,10 +44,16 @@ public class PlacePhotosController : ControllerBase
     {
         if (files.Count == 0) return BadRequest(new { message = "업로드할 사진을 선택하세요." });
 
-        var exists = await _db.Places.AnyAsync(place => place.Id == placeId, cancellationToken);
-        if (!exists) return NotFound();
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var ownerId = await _db.Places
+            .Where(place => place.Id == placeId)
+            .Select(place => place.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (ownerId is null) return NotFound();
+        if (ownerId != userId) return Forbid();
+
         var userName = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.Email);
         var created = new List<PlacePhotoDto>();
 
@@ -76,8 +81,12 @@ public class PlacePhotosController : ControllerBase
     [RequestSizeLimit(15_000_000)]
     public async Task<IActionResult> Replace(int placeId, int photoId, [FromForm] IFormFile file, CancellationToken cancellationToken)
     {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
+
         var photo = await _db.PlacePhotos.FirstOrDefaultAsync(p => p.Id == photoId && p.TracePlaceId == placeId && !p.IsDeleted, cancellationToken);
         if (photo is null) return NotFound();
+        if (!await CanModifyPhotoAsync(placeId, photo, userId, cancellationToken)) return Forbid();
 
         try
         {
@@ -96,8 +105,12 @@ public class PlacePhotosController : ControllerBase
     [HttpDelete("{photoId:int}")]
     public async Task<IActionResult> Delete(int placeId, int photoId, CancellationToken cancellationToken)
     {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
+
         var photo = await _db.PlacePhotos.FirstOrDefaultAsync(p => p.Id == photoId && p.TracePlaceId == placeId && !p.IsDeleted, cancellationToken);
         if (photo is null) return NotFound();
+        if (!await CanModifyPhotoAsync(placeId, photo, userId, cancellationToken)) return Forbid();
 
         await _storage.DeleteAsync(photo, cancellationToken);
         _db.PlacePhotos.Remove(photo);
@@ -116,6 +129,29 @@ public class PlacePhotosController : ControllerBase
         if (result is null) return NotFound();
 
         return File(result.Content, result.ContentType);
+    }
+
+    private string? CurrentUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    private Task<bool> CanViewPlaceAsync(int placeId, string? userId, CancellationToken cancellationToken = default)
+    {
+        return _db.Places.AnyAsync(place =>
+            place.Id == placeId &&
+            (place.IsShared || (!string.IsNullOrWhiteSpace(userId) && place.UserId == userId)),
+            cancellationToken);
+    }
+
+    private Task<bool> CanModifyPlaceAsync(int placeId, string userId, CancellationToken cancellationToken = default)
+    {
+        return _db.Places.AnyAsync(place =>
+            place.Id == placeId && place.UserId == userId,
+            cancellationToken);
+    }
+
+    private async Task<bool> CanModifyPhotoAsync(int placeId, PlacePhoto photo, string userId, CancellationToken cancellationToken)
+    {
+        if (photo.UserId == userId) return true;
+        return await CanModifyPlaceAsync(placeId, userId, cancellationToken);
     }
 
     private static PlacePhotoDto ToDto(PlacePhoto photo)

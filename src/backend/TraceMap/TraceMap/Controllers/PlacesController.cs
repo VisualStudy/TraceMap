@@ -15,6 +15,7 @@ public class PlacesController : Controller
         _places = places;
     }
 
+    [Authorize]
     public async Task<IActionResult> Index(string? category)
     {
         var allPlaces = await _places.GetAllAsync();

@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using TraceMap.Services;
 
 namespace TraceMap.Controllers.Api;
 
 [ApiController]
+[Authorize]
 [Route("api/challenges")]
 public class ChallengesController : ControllerBase
 {
@@ -15,5 +18,5 @@ public class ChallengesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(await _challenges.GetStatusesAsync());
+    public async Task<IActionResult> Get() => Ok(await _challenges.GetStatusesAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)));
 }

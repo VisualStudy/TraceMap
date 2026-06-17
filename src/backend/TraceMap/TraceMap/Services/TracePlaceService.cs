@@ -15,7 +15,16 @@ public class TracePlaceService : ITracePlaceService
 
     public async Task<List<TracePlace>> GetAllAsync()
     {
-        var places = await _db.Places.OrderByDescending(p => p.CreatedAt).ToListAsync();
+        if (string.IsNullOrWhiteSpace(viewerUserId))
+        {
+            return [];
+        }
+
+        var places = await _db.Places
+            .Where(p => p.UserId == viewerUserId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+
         await ApplySocialCountsAsync(places);
         return places;
     }
@@ -29,13 +38,32 @@ public class TracePlaceService : ITracePlaceService
 
     public async Task<TracePlace?> GetByIdAsync(int id)
     {
-        var place = await _db.Places.FirstOrDefaultAsync(p => p.Id == id);
+        var place = await _db.Places.FirstOrDefaultAsync(p =>
+            p.Id == id &&
+            (p.IsShared || (!string.IsNullOrWhiteSpace(viewerUserId) && p.UserId == viewerUserId)));
+
         if (place is not null)
         {
             await ApplySocialCountsAsync(new List<TracePlace> { place });
         }
 
         return place;
+    }
+
+
+    public async Task<bool> CanViewAsync(int id, string? viewerUserId = null)
+    {
+        return await _db.Places.AnyAsync(p =>
+            p.Id == id &&
+            (p.IsShared || (!string.IsNullOrWhiteSpace(viewerUserId) && p.UserId == viewerUserId)));
+    }
+
+    public async Task<bool> CanModifyAsync(int id, string? viewerUserId = null)
+    {
+        return await _db.Places.AnyAsync(p =>
+            p.Id == id &&
+            !string.IsNullOrWhiteSpace(viewerUserId) &&
+            p.UserId == viewerUserId);
     }
 
     public async Task<TracePlace> AddAsync(TracePlace place)
