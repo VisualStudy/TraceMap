@@ -51,5 +51,5 @@
 <label asp-for="SharedDescription"></label>
 <textarea asp-for="SharedDescription" rows="3" placeholder="다른 사용자에게 추천할 이유를 적어보세요."></textarea>
 
-<label asp-for="PhotoUrl"></label>
-<input asp-for="PhotoUrl" placeholder="나중에 사진 리뷰 기능으로 확장할 URL" />
+@* 더 이상 화면에 표시하지 않는 확장용 값은 수정 시 보존만 합니다. *@
+<input asp-for="PhotoUrl" type="hidden" />

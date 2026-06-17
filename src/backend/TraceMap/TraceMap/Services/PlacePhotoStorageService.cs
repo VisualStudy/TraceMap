@@ -17,7 +17,7 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
 {
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".jpg", ".jpeg", ".png", ".webp", ".gif"
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"
     };
 
     private readonly IWebHostEnvironment _environment;
@@ -39,9 +39,10 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
 
     public async Task<PlacePhoto> SaveAsync(int placeId, IFormFile file, string? userId, string? userName, CancellationToken cancellationToken = default)
     {
-        ValidateImage(file);
-
         var extension = NormalizeExtension(Path.GetExtension(file.FileName), file.ContentType);
+        var contentType = ResolveContentType(file.ContentType, extension);
+        ValidateImage(file, extension, contentType);
+
         var safeFileName = $"{Guid.NewGuid():N}{extension}";
         var blobName = $"{placeId}/{safeFileName}";
         var localRelativePath = $"{_options.LocalRoot}/{blobName}".Replace('\\', '/');
@@ -67,7 +68,7 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
                     await using var input = File.OpenRead(localFullPath);
                     var result = await blobClient.UploadAsync(input, new BlobUploadOptions
                     {
-                        HttpHeaders = new BlobHttpHeaders { ContentType = file.ContentType }
+                        HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
                     }, cancellationToken);
 
                     storageProvider = "Hybrid";
@@ -86,7 +87,7 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
             FileName = safeFileName,
             BlobName = blobName,
             LocalRelativePath = localRelativePath,
-            ContentType = string.IsNullOrWhiteSpace(file.ContentType) ? GetContentType(extension) : file.ContentType,
+            ContentType = contentType,
             Size = file.Length,
             StorageProvider = storageProvider,
             BlobETag = blobETag,
@@ -100,7 +101,9 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
 
     public async Task<PlacePhoto?> ReplaceAsync(PlacePhoto existing, IFormFile file, CancellationToken cancellationToken = default)
     {
-        ValidateImage(file);
+        var extension = NormalizeExtension(Path.GetExtension(file.FileName), file.ContentType);
+        var contentType = ResolveContentType(file.ContentType, extension);
+        ValidateImage(file, extension, contentType);
 
         var localFullPath = Path.Combine(_environment.WebRootPath, existing.LocalRelativePath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(localFullPath)!);
@@ -110,7 +113,7 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
             await file.CopyToAsync(output, cancellationToken);
         }
 
-        existing.ContentType = string.IsNullOrWhiteSpace(file.ContentType) ? existing.ContentType : file.ContentType;
+        existing.ContentType = contentType;
         existing.Size = file.Length;
         existing.UpdatedAt = DateTime.UtcNow;
 
@@ -223,18 +226,44 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
         return Path.Combine(_environment.WebRootPath, _options.LocalRoot, blobName.Replace('/', Path.DirectorySeparatorChar));
     }
 
-    private static void ValidateImage(IFormFile file)
+    private static void ValidateImage(IFormFile file, string extension, string contentType)
     {
         if (file.Length <= 0) throw new InvalidOperationException("빈 파일은 업로드할 수 없습니다.");
         if (file.Length > 10 * 1024 * 1024) throw new InvalidOperationException("사진은 10MB 이하만 업로드할 수 있습니다.");
 
-        var extension = Path.GetExtension(file.FileName);
-        if (!AllowedExtensions.Contains(extension)) throw new InvalidOperationException("jpg, png, webp, gif 이미지만 업로드할 수 있습니다.");
+        if (!AllowedExtensions.Contains(extension)) throw new InvalidOperationException("jpg, png, webp, gif, heic 이미지만 업로드할 수 있습니다.");
 
-        if (!string.IsNullOrWhiteSpace(file.ContentType) && !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        // Android 앱의 Multipart 업로드는 기기/갤러리 앱에 따라 image/jpeg 대신
+        // application/octet-stream으로 들어오는 경우가 있어, 확장자가 이미지이면
+        // 서버에서 이미지 MIME으로 보정한다. 단, 명백한 비이미지 MIME은 계속 차단한다.
+        if (!string.IsNullOrWhiteSpace(file.ContentType)
+            && !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+            && !IsUnknownBinaryContentType(file.ContentType))
         {
             throw new InvalidOperationException("이미지 파일만 업로드할 수 있습니다.");
         }
+
+        if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("이미지 파일만 업로드할 수 있습니다.");
+        }
+    }
+
+    private static bool IsUnknownBinaryContentType(string contentType)
+    {
+        return contentType.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase)
+            || contentType.Equals("binary/octet-stream", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveContentType(string? contentType, string extension)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType)
+            && contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return contentType.Equals("image/jpg", StringComparison.OrdinalIgnoreCase) ? "image/jpeg" : contentType;
+        }
+
+        return GetContentType(extension);
     }
 
     private static string NormalizeExtension(string extension, string? contentType)
@@ -245,6 +274,8 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
             "image/png" => ".png",
             "image/webp" => ".webp",
             "image/gif" => ".gif",
+            "image/heic" => ".heic",
+            "image/heif" => ".heif",
             _ => ".jpg"
         };
     }
@@ -254,6 +285,8 @@ public class PlacePhotoStorageService : IPlacePhotoStorageService
         ".png" => "image/png",
         ".webp" => "image/webp",
         ".gif" => "image/gif",
+        ".heic" => "image/heic",
+        ".heif" => "image/heif",
         _ => "image/jpeg"
     };
 }
