@@ -29,6 +29,7 @@ builder.Services
         options.User.RequireUniqueEmail = true;
         options.SignIn.RequireConfirmedAccount = false;
         options.SignIn.RequireConfirmedEmail = false;
+
         options.Password.RequireDigit = true;
         options.Password.RequireLowercase = true;
         options.Password.RequireUppercase = true;
@@ -36,6 +37,14 @@ builder.Services
         options.Password.RequiredLength = 6;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>();
+
+// MVC 페이지에서 인증되지 않은 사용자가 [Authorize] 페이지에 접근하면
+// 401 Unauthorized를 그대로 반환하지 않고 로그인 페이지로 이동하도록 설정합니다.
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+    options.DefaultForbidScheme = IdentityConstants.ApplicationScheme;
+});
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -46,12 +55,15 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllersWithViews();
+
 builder.Services.AddScoped<ITracePageService, TracePageService>();
 builder.Services.AddScoped<ITracePlaceService, TracePlaceService>();
 builder.Services.AddScoped<IChallengeService, ChallengeService>();
 builder.Services.AddScoped<ISeedDataService, SeedDataService>();
 
-builder.Services.Configure<PlacePhotoStorageOptions>(builder.Configuration.GetSection("PlacePhotoStorage"));
+builder.Services.Configure<PlacePhotoStorageOptions>(
+    builder.Configuration.GetSection("PlacePhotoStorage"));
+
 builder.Services.AddScoped<IPlacePhotoStorageService, PlacePhotoStorageService>();
 
 var app = builder.Build();
@@ -81,11 +93,15 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+
 app.UseRouting();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGroup("/api/identity").MapIdentityApi<ApplicationUser>();
+app.MapGroup("/api/identity")
+    .MapIdentityApi<ApplicationUser>();
+
 app.MapControllers();
 
 app.MapControllerRoute(
