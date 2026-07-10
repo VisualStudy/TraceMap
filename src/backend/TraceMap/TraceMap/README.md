@@ -1,6 +1,6 @@
 # TraceMap ASP.NET Core MVC
 
-TraceMap 백엔드 테스트 프로젝트입니다. 이 버전은 기존 `06_PlacePhotos` 기능을 유지하면서, 배포 환경에서는 Azure SQL Database를 사용하도록 업그레이드한 버전입니다.
+TraceMap 백엔드 테스트 프로젝트입니다. 배포 환경에서는 Azure SQL Database를 사용하도록 업그레이드한 버전입니다.
 
 ## 실행
 
@@ -15,6 +15,8 @@ dotnet run
 
 - Email: `administrator@tracemap.com`
 - Password: `Pa$$w0rd`
+
+실제 운영 환경에서는 위 계정으로 로그인 후 `회원정보` 화면에서 비밀번호를 변경하시기 바랍니다.
 
 ## DB 동작 방식
 
